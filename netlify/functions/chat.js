@@ -90,18 +90,17 @@ exports.handler = async (event) => {
           method: 'POST',
           body: JSON.stringify({
             workflow: { id: WORKFLOW_ID },
-            user: `user_${Date.now()}`,
-            metadata: { userProfile: userProfile || 'unknown' }
+            user: `user_${Date.now()}`
           })
         }
       );
       currentSessionId = session.id;
     }
 
-    // 2. Envoyer le message
+    // 2. Envoyer le message avec le profil utilisateur inclus dans le message
     let fullMessage = message;
     if (userProfile && !sessionId) {
-      fullMessage = `[Profil: ${userProfile}] ${message}`;
+      fullMessage = `[Profil utilisateur: ${userProfile}] ${message}`;
     }
 
     await makeRequest(
