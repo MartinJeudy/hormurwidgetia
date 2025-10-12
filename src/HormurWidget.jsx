@@ -191,31 +191,29 @@ const HormurWidget = () => {
 
     return (
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {buttons.map((btn, idx) => {
-          return (
-            
-              key={idx}
-              href={btn.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'block',
-                textAlign: 'center',
-                padding: '10px 16px',
-                borderRadius: '9999px',
-                fontSize: '14px',
-                fontWeight: '500',
-                transition: 'all 0.3s',
-                textDecoration: 'none',
-                border: '2px solid #EE6553',
-                color: '#EE6553',
-                backgroundColor: 'transparent'
-              }}
-            >
-              {btn.label}
-            </a>
-          );
-        })}
+        {buttons.map((btn, idx) => (
+          <a
+            key={idx}
+            href={btn.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              textAlign: 'center',
+              padding: '10px 16px',
+              borderRadius: '9999px',
+              fontSize: '14px',
+              fontWeight: '500',
+              transition: 'all 0.3s',
+              textDecoration: 'none',
+              border: '2px solid #EE6553',
+              color: '#EE6553',
+              backgroundColor: 'transparent'
+            }}
+          >
+            {btn.label}
+          </a>
+        ))}
       </div>
     );
   };
@@ -566,7 +564,7 @@ const HormurWidget = () => {
                   textAlign: 'center',
                   fontSize: '12px',
                   marginTop: '8px',
-                  opacity: 0.6',
+                  opacity: 0.6,
                   color: '#323242'
                 }}>
                   Hormur — L'art où on ne l'attend pas
