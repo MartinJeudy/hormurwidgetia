@@ -7,6 +7,7 @@ const HormurWidget = () => {
   const [inputValue, setInputValue] = useState('');
   const [userProfile, setUserProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState(null); // ← AJOUTÉ
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -45,6 +46,7 @@ const HormurWidget = () => {
     }]);
   };
 
+  // ← FONCTION MODIFIÉE
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
@@ -58,44 +60,46 @@ const HormurWidget = () => {
 
     setIsLoading(true);
 
-    // Simulation de réponse (à remplacer par l'appel à Agent Builder)
-    setTimeout(() => {
-      // Exemple de résultats
-      const mockResults = [
-        {
-          type: 'événement',
-          title: 'Concert Jazz au Jardin Secret',
-          city: 'Paris',
-          date: '15 Nov 2025',
-          genre: 'Jazz',
-          image: '🎵'
-        },
-        {
-          type: 'événement',
-          title: 'Exposition Photo Intimiste',
-          city: 'Paris',
-          date: '20 Nov 2025',
-          genre: 'Photo',
-          image: '📸'
-        },
-        {
-          type: 'artiste',
-          title: 'Marie Dubois - Pianiste',
-          city: 'Paris',
-          genre: 'Musique classique',
-          image: '🎹'
-        }
-      ];
+    try {
+      const response = await fetch('/.netlify/functions/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userMessage,
+          userProfile: userProfile,
+          sessionId: sessionId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Sauvegarder la session
+      if (data.sessionId && !sessionId) {
+        setSessionId(data.sessionId);
+      }
 
       setMessages(prev => [...prev, {
         type: 'bot',
-        content: "Voilà ce que j'ai trouvé pour vous ! 🎉",
-        results: mockResults,
+        content: data.message,
+        results: data.results || [],
+        showCalendly: data.showCalendly || false
+      }]);
+
+    } catch (error) {
+      console.error('Erreur:', error);
+      setMessages(prev => [...prev, {
+        type: 'bot',
+        content: "Désolé, je rencontre un problème technique. Pouvez-vous réessayer ? 🙏",
+        results: [],
         showCalendly: true
       }]);
-      
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const ResultCard = ({ result }) => {
@@ -192,7 +196,7 @@ const HormurWidget = () => {
     return (
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {buttons.map((btn, idx) => (
-          <a
+          
             key={idx}
             href={btn.url}
             target="_blank"
