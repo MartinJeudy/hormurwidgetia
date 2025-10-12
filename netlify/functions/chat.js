@@ -1,3 +1,5 @@
+const fetch = require('node-fetch');
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WORKFLOW_ID = process.env.WORKFLOW_ID;
 
