@@ -1,45 +1,32 @@
-const https = require('https');
-
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WORKFLOW_ID = process.env.WORKFLOW_ID;
 
-function makeRequest(options, postData = null) {
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(data);
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(parsed);
-          } else {
-            reject(new Error(parsed.error?.message || `HTTP ${res.statusCode}`));
-          }
-        } catch (e) {
-          reject(new Error('Invalid JSON response'));
-        }
-      });
-    });
-    req.on('error', reject);
-    if (postData) req.write(postData);
-    req.end();
+async function makeRequest(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      'OpenAI-Beta': 'chatkit_beta=v1',
+      ...options.headers
+    }
   });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error?.message || `HTTP ${response.status}`);
+  }
+
+  return data;
 }
 
 async function pollRunStatus(sessionId, runId, maxAttempts = 60) {
   for (let i = 0; i < maxAttempts; i++) {
-    const options = {
-      hostname: 'api.openai.com',
-      path: `/v1/chatkit/sessions/${sessionId}/runs/${runId}`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'chatkit_beta=v1'
-      }
-    };
-
-    const run = await makeRequest(options);
+    const run = await makeRequest(
+      `https://api.openai.com/v1/chatkit/sessions/${sessionId}/runs/${runId}`,
+      { method: 'GET' }
+    );
     
     if (run.status === 'completed') {
       return run;
@@ -52,7 +39,7 @@ async function pollRunStatus(sessionId, runId, maxAttempts = 60) {
   throw new Error('Timeout');
 }
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -69,7 +56,7 @@ exports.handler = async (event) => {
       statusCode: 500,
       headers,
       body: JSON.stringify({
-        message: "Configuration manquante. Vérifiez les variables Netlify.",
+        message: "Configuration manquante. Vérifiez les variables d'environnement OPENAI_API_KEY et WORKFLOW_ID dans Netlify.",
         results: [],
         showCalendly: true
       })
@@ -95,81 +82,56 @@ exports.handler = async (event) => {
 
     // 1. Créer une session si nécessaire
     if (!currentSessionId) {
-      const sessionOptions = {
-        hostname: 'api.openai.com',
-        path: '/v1/chatkit/sessions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'OpenAI-Beta': 'chatkit_beta=v1'
+      const session = await makeRequest(
+        'https://api.openai.com/v1/chatkit/sessions',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            workflow: { id: WORKFLOW_ID },
+            user: `user_${Date.now()}`,
+            metadata: { userProfile: userProfile || 'unknown' }
+          })
         }
-      };
-
-      const sessionData = JSON.stringify({
-        workflow: { id: WORKFLOW_ID },
-        user: `user_${Date.now()}`,
-        metadata: { userProfile: userProfile || 'unknown' }
-      });
-
-      const session = await makeRequest(sessionOptions, sessionData);
+      );
       currentSessionId = session.id;
     }
 
     // 2. Envoyer le message
-    const messageOptions = {
-      hostname: 'api.openai.com',
-      path: `/v1/chatkit/sessions/${currentSessionId}/messages`,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'chatkit_beta=v1'
-      }
-    };
-
     let fullMessage = message;
     if (userProfile && !sessionId) {
       fullMessage = `[Profil: ${userProfile}] ${message}`;
     }
 
-    const messageData = JSON.stringify({
-      role: 'user',
-      content: fullMessage
-    });
-
-    const messageResponse = await makeRequest(messageOptions, messageData);
+    await makeRequest(
+      `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          role: 'user',
+          content: fullMessage
+        })
+      }
+    );
 
     // 3. Lancer le workflow
-    const runOptions = {
-      hostname: 'api.openai.com',
-      path: `/v1/chatkit/sessions/${currentSessionId}/runs`,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'chatkit_beta=v1'
+    const run = await makeRequest(
+      `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/runs`,
+      {
+        method: 'POST',
+        body: JSON.stringify({})
       }
-    };
-
-    const run = await makeRequest(runOptions, JSON.stringify({}));
+    );
 
     // 4. Attendre la réponse
     await pollRunStatus(currentSessionId, run.id);
 
     // 5. Récupérer les messages
-    const messagesOptions = {
-      hostname: 'api.openai.com',
-      path: `/v1/chatkit/sessions/${currentSessionId}/messages?limit=1&order=desc`,
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'OpenAI-Beta': 'chatkit_beta=v1'
-      }
-    };
+    const messages = await makeRequest(
+      `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/messages?limit=1&order=desc`,
+      { method: 'GET' }
+    );
 
-    const messages = await makeRequest(messagesOptions);
-    const assistantMessage = messages.data[0]?.content || "Désolé, je n'ai pas pu générer de réponse.";
+    const assistantMessage = messages.data?.[0]?.content || "Désolé, je n'ai pas pu générer de réponse.";
 
     // 6. Parser le JSON si possible
     let response;
@@ -199,14 +161,15 @@ exports.handler = async (event) => {
     };
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Erreur détaillée:', error);
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         message: "Désolé, problème technique. Pouvez-vous réessayer ? 🙏",
         results: [],
-        showCalendly: true
+        showCalendly: true,
+        error: error.message
       })
     };
   }
