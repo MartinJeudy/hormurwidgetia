@@ -106,29 +106,75 @@ const HormurWidget = () => {
     };
 
     return (
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-shadow duration-300 mb-3">
-        <div className="flex gap-3">
-          <div className="w-14 h-14 rounded-lg flex items-center justify-center text-3xl bg-gradient-to-br from-pink-100 to-orange-50">
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '16px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        border: '1px solid #f3f4f6',
+        marginBottom: '12px',
+        transition: 'box-shadow 0.3s'
+      }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '30px',
+            background: 'linear-gradient(135deg, #fce7f3 0%, #fed7aa 100%)'
+          }}>
             {result.image}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="inline-block px-3 py-1 rounded-full text-xs font-medium text-white mb-2"
-                 style={{ backgroundColor: typeColors[result.type] }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              display: 'inline-block',
+              padding: '4px 12px',
+              borderRadius: '12px',
+              fontSize: '12px',
+              fontWeight: '500',
+              color: 'white',
+              backgroundColor: typeColors[result.type],
+              marginBottom: '8px'
+            }}>
               {result.type.charAt(0).toUpperCase() + result.type.slice(1)}
             </div>
-            <h4 className="font-bold text-sm text-gray-800 mb-1 line-clamp-1" style={{ fontFamily: 'Georgia, serif' }}>
+            <h4 style={{
+              fontFamily: 'Georgia, serif',
+              fontWeight: 'bold',
+              fontSize: '14px',
+              color: '#1f2937',
+              marginBottom: '4px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
               {result.title}
             </h4>
-            <p className="text-xs text-gray-600">
+            <p style={{ fontSize: '12px', color: '#6b7280' }}>
               {result.city} {result.date && `• ${result.date}`}
             </p>
             {result.genre && (
-              <p className="text-xs text-gray-500 mt-1">{result.genre}</p>
+              <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>{result.genre}</p>
             )}
           </div>
         </div>
-        <button className="w-full mt-3 bg-gradient-to-r from-red-500 to-orange-500 text-white py-2 px-4 rounded-full text-sm font-medium hover:shadow-lg transition-all duration-300 hover:scale-[1.02]"
-                style={{ backgroundColor: '#EE6553' }}>
+        <button style={{
+          width: '100%',
+          marginTop: '12px',
+          background: 'linear-gradient(to right, #ef4444, #f97316)',
+          backgroundColor: '#EE6553',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: '9999px',
+          fontSize: '14px',
+          fontWeight: '500',
+          border: 'none',
+          cursor: 'pointer',
+          transition: 'all 0.3s'
+        }}>
           Voir les détails
         </button>
       </div>
@@ -144,19 +190,26 @@ const HormurWidget = () => {
     ];
 
     return (
-      <div className="mt-3 space-y-2">
+      <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {buttons.map((btn, idx) => (
-          
+          <a
             key={idx}
             href={btn.url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`block text-center py-2.5 px-4 rounded-full text-sm font-medium transition-all duration-300 ${
-              btn.secondary 
-                ? 'border-2 text-gray-700 hover:bg-gray-50' 
-                : 'border-2 hover:bg-red-50'
-            }`}
-            style={btn.secondary ? { borderColor: '#EE6553', color: '#EE6553' } : { borderColor: '#EE6553', color: '#EE6553' }}
+            style={{
+              display: 'block',
+              textAlign: 'center',
+              padding: '10px 16px',
+              borderRadius: '9999px',
+              fontSize: '14px',
+              fontWeight: '500',
+              transition: 'all 0.3s',
+              textDecoration: 'none',
+              border: '2px solid #EE6553',
+              color: '#EE6553',
+              backgroundColor: btn.secondary ? 'transparent' : 'transparent'
+            }}
           >
             {btn.label}
           </a>
@@ -166,194 +219,8 @@ const HormurWidget = () => {
   };
 
   return (
-    <div className="fixed z-50" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      {/* Bouton flottant (état discret) */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-5 right-5 w-14 h-14 md:w-16 md:h-16 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 ${
-          isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'
-        }`}
-        style={{
-          background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)',
-          animation: 'pulse 2s ease-in-out infinite'
-        }}
-        aria-label="Ouvrir l'assistant Hormur"
-      >
-        <MessageCircle className="text-white" size={24} />
-      </button>
-
-      {/* Modale (état ouvert) */}
-      {isOpen && (
-        <>
-          {/* Overlay */}
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-30 backdrop-blur-sm transition-opacity duration-300"
-            onClick={() => setIsOpen(false)}
-          />
-          
-          {/* Widget modal */}
-          <div 
-            className="fixed bottom-5 right-5 w-[90vw] md:w-[420px] h-[85vh] md:h-[600px] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300"
-            style={{ 
-              animation: 'slideUp 0.3s ease-out',
-              maxHeight: '80vh'
-            }}
-          >
-            {/* En-tête */}
-            <div className="flex-shrink-0 px-5 py-4 flex items-center justify-between border-b"
-                 style={{ backgroundColor: '#FEF6F4', borderColor: '#DFDFE9' }}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                     style={{ background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)' }}>
-                  H
-                </div>
-                <div>
-                  <h3 className="font-bold text-base" style={{ fontFamily: 'Georgia, serif', color: '#323242' }}>
-                    Hormur
-                  </h3>
-                  <p className="text-xs opacity-70" style={{ color: '#323242' }}>
-                    L'art où on ne l'attend pas
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                aria-label="Fermer"
-              >
-                <X size={20} style={{ color: '#323242' }} />
-              </button>
-            </div>
-
-            {/* Zone de messages scrollable */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-4" style={{ backgroundColor: '#FFFFFF' }}>
-              {messages.map((message, idx) => (
-                <div key={idx}>
-                  {message.type === 'bot' ? (
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white flex-shrink-0"
-                           style={{ background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)' }}>
-                        <Sparkles size={16} />
-                      </div>
-                      <div className="flex-1">
-                        <div className="bg-gradient-to-br from-pink-50 to-orange-50 rounded-2xl rounded-tl-none p-4 shadow-sm">
-                          <p className="text-sm leading-relaxed" style={{ color: '#323242' }}>
-                            {message.content}
-                          </p>
-                        </div>
-                        
-                        {/* Boutons de profil */}
-                        {message.showProfileButtons && !userProfile && (
-                          <div className="grid grid-cols-3 gap-2 mt-3">
-                            <button
-                              onClick={() => handleProfileSelect('spectateur')}
-                              className="bg-white border-2 rounded-xl p-3 hover:shadow-md transition-all duration-300 hover:scale-105"
-                              style={{ borderColor: '#EEB653' }}
-                            >
-                              <div className="text-2xl mb-1">🎟️</div>
-                              <div className="text-xs font-medium" style={{ color: '#323242' }}>Événements</div>
-                            </button>
-                            <button
-                              onClick={() => handleProfileSelect('artiste')}
-                              className="bg-white border-2 rounded-xl p-3 hover:shadow-md transition-all duration-300 hover:scale-105"
-                              style={{ borderColor: '#EE7951' }}
-                            >
-                              <div className="text-2xl mb-1">🎨</div>
-                              <div className="text-xs font-medium" style={{ color: '#323242' }}>Artistes</div>
-                            </button>
-                            <button
-                              onClick={() => handleProfileSelect('hote')}
-                              className="bg-white border-2 rounded-xl p-3 hover:shadow-md transition-all duration-300 hover:scale-105"
-                              style={{ borderColor: '#F18475' }}
-                            >
-                              <div className="text-2xl mb-1">🏡</div>
-                              <div className="text-xs font-medium" style={{ color: '#323242' }}>Lieux</div>
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Résultats */}
-                        {message.results && (
-                          <div className="mt-4">
-                            {message.results.map((result, ridx) => (
-                              <ResultCard key={ridx} result={result} />
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Boutons Calendly */}
-                        {message.showCalendly && (
-                          <CalendlyButtons profile={userProfile} />
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-end">
-                      <div className="bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-2xl rounded-tr-none p-4 max-w-[75%] shadow-sm"
-                           style={{ backgroundColor: '#EE6553' }}>
-                        <p className="text-sm leading-relaxed">
-                          {message.content}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {isLoading && (
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white"
-                       style={{ background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)' }}>
-                    <Sparkles size={16} />
-                  </div>
-                  <div className="bg-gradient-to-br from-pink-50 to-orange-50 rounded-2xl rounded-tl-none p-4 shadow-sm">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Zone de saisie */}
-            <div className="flex-shrink-0 p-4 border-t" style={{ backgroundColor: '#FCE5DD', borderColor: '#DFDFE9' }}>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Écrivez votre message..."
-                  className="flex-1 px-4 py-3 rounded-full border-2 focus:outline-none focus:ring-2 transition-all text-sm"
-                  style={{ 
-                    borderColor: '#DFDFE9',
-                    focusRingColor: '#EE6553'
-                  }}
-                />
-                <button
-                  onClick={handleSendMessage}
-                  disabled={!inputValue.trim()}
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white transition-all duration-300 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ 
-                    background: inputValue.trim() ? 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)' : '#DFDFE9'
-                  }}
-                >
-                  <Send size={18} />
-                </button>
-              </div>
-              <p className="text-center text-xs mt-2 opacity-60" style={{ color: '#323242' }}>
-                Hormur — L'art où on ne l'attend pas
-              </p>
-            </div>
-          </div>
-        </>
-      )}
-
-      <style jsx>{`
+    <>
+      <style>{`
         @keyframes pulse {
           0%, 100% {
             transform: scale(1);
@@ -374,33 +241,368 @@ const HormurWidget = () => {
           }
         }
 
-        .line-clamp-1 {
-          display: -webkit-box;
-          -webkit-line-clamp: 1;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-
-        /* Scrollbar personnalisée */
-        .overflow-y-auto::-webkit-scrollbar {
+        .hormur-scrollbar::-webkit-scrollbar {
           width: 6px;
         }
 
-        .overflow-y-auto::-webkit-scrollbar-track {
+        .hormur-scrollbar::-webkit-scrollbar-track {
           background: #FCE5DD;
           border-radius: 10px;
         }
 
-        .overflow-y-auto::-webkit-scrollbar-thumb {
+        .hormur-scrollbar::-webkit-scrollbar-thumb {
           background: #EE6553;
           border-radius: 10px;
         }
 
-        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+        .hormur-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #EE7951;
         }
+
+        .hormur-floating-btn {
+          animation: pulse 2s ease-in-out infinite;
+        }
+
+        .hormur-modal {
+          animation: slideUp 0.3s ease-out;
+        }
       `}</style>
-    </div>
+
+      <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+        {/* Bouton flottant (état discret) */}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="hormur-floating-btn"
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'all 0.3s',
+            background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)',
+            border: 'none',
+            cursor: 'pointer',
+            transform: isOpen ? 'scale(0)' : 'scale(1)',
+            opacity: isOpen ? 0 : 1
+          }}
+          aria-label="Ouvrir l'assistant Hormur"
+        >
+          <MessageCircle color="white" size={24} />
+        </button>
+
+        {/* Modale (état ouvert) */}
+        {isOpen && (
+          <>
+            {/* Overlay */}
+            <div 
+              style={{
+                position: 'fixed',
+                inset: 0,
+                backgroundColor: 'rgba(0,0,0,0.3)',
+                backdropFilter: 'blur(4px)',
+                transition: 'opacity 0.3s',
+                zIndex: 9998
+              }}
+              onClick={() => setIsOpen(false)}
+            />
+            
+            {/* Widget modal */}
+            <div 
+              className="hormur-modal"
+              style={{
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                width: '90vw',
+                maxWidth: '420px',
+                height: '85vh',
+                maxHeight: '600px',
+                backgroundColor: 'white',
+                borderRadius: '24px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                transition: 'all 0.3s',
+                zIndex: 9999
+              }}
+            >
+              {/* En-tête */}
+              <div style={{
+                flexShrink: 0,
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid #DFDFE9',
+                backgroundColor: '#FEF6F4'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)'
+                  }}>
+                    H
+                  </div>
+                  <div>
+                    <h3 style={{ fontFamily: 'Georgia, serif', fontWeight: 'bold', fontSize: '16px', color: '#323242', margin: 0 }}>
+                      Hormur
+                    </h3>
+                    <p style={{ fontSize: '12px', opacity: 0.7, color: '#323242', margin: 0 }}>
+                      L'art où on ne l'attend pas
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  style={{
+                    padding: '8px',
+                    borderRadius: '50%',
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s'
+                  }}
+                  aria-label="Fermer"
+                >
+                  <X size={20} color="#323242" />
+                </button>
+              </div>
+
+              {/* Zone de messages scrollable */}
+              <div className="hormur-scrollbar" style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '20px',
+                backgroundColor: '#FFFFFF'
+              }}>
+                {messages.map((message, idx) => (
+                  <div key={idx} style={{ marginBottom: '16px' }}>
+                    {message.type === 'bot' ? (
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '50%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          flexShrink: 0,
+                          background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)'
+                        }}>
+                          <Sparkles size={16} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{
+                            background: 'linear-gradient(135deg, #fce7f3 0%, #fed7aa 100%)',
+                            borderRadius: '16px',
+                            borderTopLeftRadius: '4px',
+                            padding: '16px',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                          }}>
+                            <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: 0 }}>
+                              {message.content}
+                            </p>
+                          </div>
+                          
+                          {/* Boutons de profil */}
+                          {message.showProfileButtons && !userProfile && (
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(3, 1fr)',
+                              gap: '8px',
+                              marginTop: '12px'
+                            }}>
+                              <button
+                                onClick={() => handleProfileSelect('spectateur')}
+                                style={{
+                                  backgroundColor: 'white',
+                                  border: '2px solid #EEB653',
+                                  borderRadius: '12px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.3s',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                <div style={{ fontSize: '24px', marginBottom: '4px' }}>🎟️</div>
+                                <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Événements</div>
+                              </button>
+                              <button
+                                onClick={() => handleProfileSelect('artiste')}
+                                style={{
+                                  backgroundColor: 'white',
+                                  border: '2px solid #EE7951',
+                                  borderRadius: '12px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.3s',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                <div style={{ fontSize: '24px', marginBottom: '4px' }}>🎨</div>
+                                <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Artistes</div>
+                              </button>
+                              <button
+                                onClick={() => handleProfileSelect('hote')}
+                                style={{
+                                  backgroundColor: 'white',
+                                  border: '2px solid #F18475',
+                                  borderRadius: '12px',
+                                  padding: '12px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.3s',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                <div style={{ fontSize: '24px', marginBottom: '4px' }}>🏡</div>
+                                <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Lieux</div>
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Résultats */}
+                          {message.results && (
+                            <div style={{ marginTop: '16px' }}>
+                              {message.results.map((result, ridx) => (
+                                <ResultCard key={ridx} result={result} />
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Boutons Calendly */}
+                          {message.showCalendly && (
+                            <CalendlyButtons profile={userProfile} />
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{
+                          background: 'linear-gradient(to right, #ef4444, #f97316)',
+                          backgroundColor: '#EE6553',
+                          color: 'white',
+                          borderRadius: '16px',
+                          borderTopRightRadius: '4px',
+                          padding: '16px',
+                          maxWidth: '75%',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        }}>
+                          <p style={{ fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                            {message.content}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {isLoading && (
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)'
+                    }}>
+                      <Sparkles size={16} />
+                    </div>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #fce7f3 0%, #fed7aa 100%)',
+                      borderRadius: '16px',
+                      borderTopLeftRadius: '4px',
+                      padding: '16px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    }}>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite' }} />
+                        <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite 0.15s' }} />
+                        <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite 0.3s' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Zone de saisie */}
+              <div style={{
+                flexShrink: 0,
+                padding: '16px',
+                borderTop: '1px solid #DFDFE9',
+                backgroundColor: '#FCE5DD'
+              }}>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="Écrivez votre message..."
+                    style={{
+                      flex: 1,
+                      padding: '12px 16px',
+                      borderRadius: '9999px',
+                      border: '2px solid #DFDFE9',
+                      fontSize: '14px',
+                      outline: 'none'
+                    }}
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={!inputValue.trim()}
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      transition: 'all 0.3s',
+                      border: 'none',
+                      cursor: inputValue.trim() ? 'pointer' : 'not-allowed',
+                      background: inputValue.trim() ? 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)' : '#DFDFE9',
+                      opacity: inputValue.trim() ? 1 : 0.5
+                    }}
+                  >
+                    <Send size={18} />
+                  </button>
+                </div>
+                <p style={{
+                  textAlign: 'center',
+                  fontSize: '12px',
+                  marginTop: '8px',
+                  opacity: 0.6,
+                  color: '#323242'
+                }}>
+                  Hormur — L'art où on ne l'attend pas
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 };
 
