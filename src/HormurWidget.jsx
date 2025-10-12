@@ -166,7 +166,6 @@ const HormurWidget = () => {
           width: '100%',
           marginTop: '12px',
           background: 'linear-gradient(to right, #ef4444, #f97316)',
-          backgroundColor: '#EE6553',
           color: 'white',
           padding: '8px 16px',
           borderRadius: '9999px',
@@ -183,38 +182,40 @@ const HormurWidget = () => {
   };
 
   const CalendlyButtons = ({ profile }) => {
-    const buttons = profile === 'artiste' ? [
-      { label: '💬 Discuter avec Éléonore (15 min)', url: 'https://calendly.com/eleonore-hormur/15min' }
-    ] : [
-      { label: '💬 Échanger avec Martin (15 min)', url: 'https://calendly.com/martin-jeudy/15min' },
-      { label: '🤝 Rendez-vous stratégique (30 min)', url: 'https://calendly.com/martin-jeudy/30min', secondary: true }
-    ];
+    const buttons = profile === 'artiste' 
+      ? [{ label: '💬 Discuter avec Éléonore (15 min)', url: 'https://calendly.com/eleonore-hormur/15min' }] 
+      : [
+          { label: '💬 Échanger avec Martin (15 min)', url: 'https://calendly.com/martin-jeudy/15min' },
+          { label: '🤝 Rendez-vous stratégique (30 min)', url: 'https://calendly.com/martin-jeudy/30min', secondary: true }
+        ];
 
     return (
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {buttons.map((btn, idx) => (
-          
-            key={idx}
-            href={btn.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'block',
-              textAlign: 'center',
-              padding: '10px 16px',
-              borderRadius: '9999px',
-              fontSize: '14px',
-              fontWeight: '500',
-              transition: 'all 0.3s',
-              textDecoration: 'none',
-              border: '2px solid #EE6553',
-              color: '#EE6553',
-              backgroundColor: 'transparent'
-            }}
-          >
-            {btn.label}
-          </a>
-        ))}
+        {buttons.map((btn, idx) => {
+          return (
+            
+              key={idx}
+              href={btn.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                textAlign: 'center',
+                padding: '10px 16px',
+                borderRadius: '9999px',
+                fontSize: '14px',
+                fontWeight: '500',
+                transition: 'all 0.3s',
+                textDecoration: 'none',
+                border: '2px solid #EE6553',
+                color: '#EE6553',
+                backgroundColor: 'transparent'
+              }}
+            >
+              {btn.label}
+            </a>
+          );
+        })}
       </div>
     );
   };
@@ -223,14 +224,9 @@ const HormurWidget = () => {
     <>
       <style>{`
         @keyframes pulse {
-          0%, 100% {
-            transform: scale(1);
-          }
-          50% {
-            transform: scale(1.05);
-          }
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
         }
-
         @keyframes slideUp {
           from {
             opacity: 0;
@@ -241,32 +237,20 @@ const HormurWidget = () => {
             transform: translateY(0) scale(1);
           }
         }
-
-        .hormur-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-
+        .hormur-scrollbar::-webkit-scrollbar { width: 6px; }
         .hormur-scrollbar::-webkit-scrollbar-track {
           background: #FCE5DD;
           border-radius: 10px;
         }
-
         .hormur-scrollbar::-webkit-scrollbar-thumb {
           background: #EE6553;
           border-radius: 10px;
         }
-
         .hormur-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #EE7951;
         }
-
-        .hormur-floating-btn {
-          animation: pulse 2s ease-in-out infinite;
-        }
-
-        .hormur-modal {
-          animation: slideUp 0.3s ease-out;
-        }
+        .hormur-floating-btn { animation: pulse 2s ease-in-out infinite; }
+        .hormur-modal { animation: slideUp 0.3s ease-out; }
       `}</style>
 
       <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -486,7 +470,6 @@ const HormurWidget = () => {
                       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <div style={{
                           background: 'linear-gradient(to right, #ef4444, #f97316)',
-                          backgroundColor: '#EE6553',
                           color: 'white',
                           borderRadius: '16px',
                           borderTopRightRadius: '4px',
@@ -583,7 +566,7 @@ const HormurWidget = () => {
                   textAlign: 'center',
                   fontSize: '12px',
                   marginTop: '8px',
-                  opacity: 0.6,
+                  opacity: 0.6',
                   color: '#323242'
                 }}>
                   Hormur — L'art où on ne l'attend pas
