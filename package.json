@@ -2,6 +2,7 @@
   "name": "hormur-widget",
   "version": "1.0.0",
   "description": "Widget conversationnel Hormur - L'art où on ne l'attend pas",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "dev": "vite",
