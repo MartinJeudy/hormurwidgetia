@@ -17,7 +17,7 @@ async function makeRequest(url, options = {}) {
   const data = await response.json();
 
   if (!response.ok) {
-    throw new Error(data.error?.message || `HTTP ${response.status}`);
+    throw new Error(data.error?.message || `HTTP ${response.status}: ${JSON.stringify(data)}`);
   }
 
   return data;
@@ -33,12 +33,12 @@ async function pollRunStatus(sessionId, runId, maxAttempts = 60) {
     if (run.status === 'completed') {
       return run;
     } else if (run.status === 'failed' || run.status === 'cancelled') {
-      throw new Error(`Run ${run.status}`);
+      throw new Error(`Run ${run.status}: ${run.error || 'Unknown error'}`);
     }
 
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  throw new Error('Timeout');
+  throw new Error('Timeout waiting for run completion');
 }
 
 exports.handler = async (event) => {
@@ -54,6 +54,10 @@ exports.handler = async (event) => {
   }
 
   if (!OPENAI_API_KEY || !WORKFLOW_ID) {
+    console.error('Missing environment variables:', { 
+      hasApiKey: !!OPENAI_API_KEY, 
+      hasWorkflowId: !!WORKFLOW_ID 
+    });
     return {
       statusCode: 500,
       headers,
@@ -84,6 +88,7 @@ exports.handler = async (event) => {
 
     // 1. Créer une session si nécessaire
     if (!currentSessionId) {
+      console.log('Creating new session...');
       const session = await makeRequest(
         'https://api.openai.com/v1/chatkit/sessions',
         {
@@ -95,14 +100,16 @@ exports.handler = async (event) => {
         }
       );
       currentSessionId = session.id;
+      console.log('Session created:', currentSessionId);
     }
 
-    // 2. Envoyer le message avec le profil utilisateur inclus dans le message
+    // 2. Envoyer le message avec le profil utilisateur inclus
     let fullMessage = message;
     if (userProfile && !sessionId) {
       fullMessage = `[Profil utilisateur: ${userProfile}] ${message}`;
     }
 
+    console.log('Sending message to session:', currentSessionId);
     await makeRequest(
       `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/messages`,
       {
@@ -115,6 +122,7 @@ exports.handler = async (event) => {
     );
 
     // 3. Lancer le workflow
+    console.log('Starting workflow run...');
     const run = await makeRequest(
       `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/runs`,
       {
@@ -122,17 +130,22 @@ exports.handler = async (event) => {
         body: JSON.stringify({})
       }
     );
+    console.log('Run started:', run.id);
 
     // 4. Attendre la réponse
+    console.log('Waiting for run completion...');
     await pollRunStatus(currentSessionId, run.id);
+    console.log('Run completed');
 
     // 5. Récupérer les messages
+    console.log('Fetching response messages...');
     const messages = await makeRequest(
       `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/messages?limit=1&order=desc`,
       { method: 'GET' }
     );
 
     const assistantMessage = messages.data?.[0]?.content || "Désolé, je n'ai pas pu générer de réponse.";
+    console.log('Assistant response received:', assistantMessage.substring(0, 100) + '...');
 
     // 6. Parser le JSON si possible
     let response;
@@ -145,6 +158,7 @@ exports.handler = async (event) => {
       if (typeof response.showCalendly !== 'boolean') response.showCalendly = false;
       
     } catch (e) {
+      // Si ce n'est pas du JSON, retourner le texte brut
       response = {
         message: assistantMessage,
         results: [],
@@ -163,6 +177,8 @@ exports.handler = async (event) => {
 
   } catch (error) {
     console.error('Erreur détaillée:', error);
+    console.error('Stack trace:', error.stack);
+    
     return {
       statusCode: 500,
       headers,
