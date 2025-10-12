@@ -1,48 +1,6 @@
 const fetch = require('node-fetch');
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const WORKFLOW_ID = process.env.WORKFLOW_ID;
-
-async function makeOpenAIRequest(endpoint, options = {}) {
-  const fullUrl = `https://api.openai.com${endpoint}`;
-  
-  const response = await fetch(fullUrl, {
-    method: options.method || 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'OpenAI-Beta': 'chatkit_beta=v1'
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    const errorMsg = data.error?.message || JSON.stringify(data);
-    throw new Error(`OpenAI API Error (${response.status}): ${errorMsg}`);
-  }
-
-  return data;
-}
-
-async function waitForRunCompletion(sessionId, runId, maxAttempts = 60) {
-  for (let i = 0; i < maxAttempts; i++) {
-    const run = await makeOpenAIRequest(`/v1/chatkit/sessions/${sessionId}/runs/${runId}`);
-    
-    if (run.status === 'completed') {
-      return run;
-    }
-    
-    if (run.status === 'failed' || run.status === 'cancelled') {
-      throw new Error(`Run ${run.status}: ${run.error || 'Unknown error'}`);
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-  
-  throw new Error('Run timeout after 60 seconds');
-}
+const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
 
 exports.handler = async (event) => {
   const corsHeaders = {
@@ -52,20 +10,19 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json'
   };
 
+  // Gestion CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: corsHeaders, body: '' };
   }
 
-  if (!OPENAI_API_KEY || !WORKFLOW_ID) {
-    console.error('❌ Missing env vars:', { 
-      hasKey: !!OPENAI_API_KEY, 
-      hasWorkflow: !!WORKFLOW_ID 
-    });
+  // Vérification de la configuration
+  if (!N8N_WEBHOOK_URL) {
+    console.error('❌ N8N_WEBHOOK_URL manquant');
     return {
       statusCode: 500,
       headers: corsHeaders,
       body: JSON.stringify({
-        message: "Configuration manquante. Vérifiez OPENAI_API_KEY et WORKFLOW_ID.",
+        message: "Configuration manquante. Vérifiez N8N_WEBHOOK_URL dans Netlify.",
         results: [],
         showCalendly: true
       })
@@ -75,6 +32,7 @@ exports.handler = async (event) => {
   try {
     const { message, userProfile, sessionId } = JSON.parse(event.body || '{}');
     
+    // Validation du message
     if (!message?.trim()) {
       return {
         statusCode: 400,
@@ -87,89 +45,41 @@ exports.handler = async (event) => {
       };
     }
 
-    let currentSessionId = sessionId;
+    console.log('📤 Envoi vers n8n:', { message, userProfile, sessionId });
 
-    // Créer une session si nécessaire
-    if (!currentSessionId) {
-      console.log('📝 Creating session...');
-      const session = await makeOpenAIRequest('/v1/chatkit/sessions', {
-        method: 'POST',
-        body: {
-          workflow: { id: WORKFLOW_ID },
-          user: `user_${Date.now()}`
-        }
-      });
-      currentSessionId = session.id;
-      console.log('✅ Session created:', currentSessionId);
-    }
-
-    // Envoyer le message
-    let fullMessage = message;
-    if (userProfile && !sessionId) {
-      fullMessage = `[Profil: ${userProfile}] ${message}`;
-    }
-
-    console.log('💬 Sending message...');
-    await makeOpenAIRequest(`/v1/chatkit/sessions/${currentSessionId}/messages`, {
+    // Appel vers n8n
+    const response = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
-      body: {
-        role: 'user',
-        content: fullMessage
-      }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: message.trim(),
+        userProfile: userProfile || null,
+        sessionId: sessionId || null,
+        timestamp: new Date().toISOString()
+      })
     });
 
-    // Démarrer le workflow
-    console.log('🚀 Starting run...');
-    const run = await makeOpenAIRequest(`/v1/chatkit/sessions/${currentSessionId}/runs`, {
-      method: 'POST',
-      body: {}
-    });
-
-    // Attendre la completion
-    console.log('⏳ Waiting for completion...');
-    await waitForRunCompletion(currentSessionId, run.id);
-
-    // Récupérer la réponse
-    console.log('📥 Fetching response...');
-    const messages = await makeOpenAIRequest(
-      `/v1/chatkit/sessions/${currentSessionId}/messages?limit=1&order=desc`
-    );
-
-    const assistantMessage = messages.data?.[0]?.content || "Désolé, aucune réponse générée.";
-    console.log('✅ Response received');
-
-    // Parser le JSON si possible
-    let response;
-    try {
-      const cleaned = assistantMessage
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
-        .trim();
-      response = JSON.parse(cleaned);
-      
-      if (!response.message) response.message = cleaned;
-      if (!Array.isArray(response.results)) response.results = [];
-      if (typeof response.showCalendly !== 'boolean') response.showCalendly = false;
-    } catch (e) {
-      response = {
-        message: assistantMessage,
-        results: [],
-        showCalendly: false
-      };
+    if (!response.ok) {
+      throw new Error(`n8n error: ${response.status} ${response.statusText}`);
     }
 
+    const data = await response.json();
+    console.log('✅ Réponse de n8n reçue');
+
+    // Formatage de la réponse (n8n doit renvoyer ce format)
     return {
       statusCode: 200,
       headers: corsHeaders,
       body: JSON.stringify({
-        sessionId: currentSessionId,
-        ...response
+        sessionId: data.sessionId || sessionId,
+        message: data.message || "Réponse reçue",
+        results: Array.isArray(data.results) ? data.results : [],
+        showCalendly: data.showCalendly || false
       })
     };
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
-    console.error('Stack:', error.stack);
+    console.error('❌ Erreur:', error.message);
     
     return {
       statusCode: 500,
