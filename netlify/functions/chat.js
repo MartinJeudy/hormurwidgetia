@@ -2,8 +2,11 @@ const fetch = require('node-fetch');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const WORKFLOW_ID = process.env.WORKFLOW_ID;
+const OPENAI_BASE_URL = 'https://api.openai.com';
 
-async function makeRequest(url, options = {}) {
+async function makeRequest(path, options = {}) {
+  const url = `${OPENAI_BASE_URL}${path}`;
+  
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -26,7 +29,7 @@ async function makeRequest(url, options = {}) {
 async function pollRunStatus(sessionId, runId, maxAttempts = 60) {
   for (let i = 0; i < maxAttempts; i++) {
     const run = await makeRequest(
-      `https://api.openai.com/v1/chatkit/sessions/${sessionId}/runs/${runId}`,
+      `/v1/chatkit/sessions/${sessionId}/runs/${runId}`,
       { method: 'GET' }
     );
     
@@ -90,7 +93,7 @@ exports.handler = async (event) => {
     if (!currentSessionId) {
       console.log('Creating new session...');
       const session = await makeRequest(
-        'https://api.openai.com/v1/chatkit/sessions',
+        '/v1/chatkit/sessions',
         {
           method: 'POST',
           body: JSON.stringify({
@@ -111,7 +114,7 @@ exports.handler = async (event) => {
 
     console.log('Sending message to session:', currentSessionId);
     await makeRequest(
-      `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/messages`,
+      `/v1/chatkit/sessions/${currentSessionId}/messages`,
       {
         method: 'POST',
         body: JSON.stringify({
@@ -124,7 +127,7 @@ exports.handler = async (event) => {
     // 3. Lancer le workflow
     console.log('Starting workflow run...');
     const run = await makeRequest(
-      `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/runs`,
+      `/v1/chatkit/sessions/${currentSessionId}/runs`,
       {
         method: 'POST',
         body: JSON.stringify({})
@@ -140,7 +143,7 @@ exports.handler = async (event) => {
     // 5. Récupérer les messages
     console.log('Fetching response messages...');
     const messages = await makeRequest(
-      `https://api.openai.com/v1/chatkit/sessions/${currentSessionId}/messages?limit=1&order=desc`,
+      `/v1/chatkit/sessions/${currentSessionId}/messages?limit=1&order=desc`,
       { method: 'GET' }
     );
 
