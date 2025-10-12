@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Calendar, Sparkles, Music, Home, Ticket } from 'lucide-react';
+import { MessageCircle, X, Send, Sparkles } from 'lucide-react';
 
 const HormurWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -23,7 +23,7 @@ const HormurWidget = () => {
       setTimeout(() => {
         setMessages([{
           type: 'bot',
-          content: "Bonjour 👋 Je suis l'assistant Hormur. Vous voulez découvrir un événement, trouver un artiste ou repérer un lieu ?",
+          content: "Bonjour 👋 Je suis l'assistant Hormur. Vous cherchez un événement, un artiste ou un lieu ?",
           showProfileButtons: true
         }]);
       }, 300);
@@ -33,9 +33,9 @@ const HormurWidget = () => {
   const handleProfileSelect = (profile) => {
     setUserProfile(profile);
     const profileMessages = {
-      spectateur: "Super ! Je vais vous aider à trouver un événement. Plutôt concert, expo ou atelier ? Et dans quelle ville ? ✨",
-      hote: "Parfait ! Quel type d'artiste cherchez-vous pour votre événement ? (musique, théâtre, arts visuels…)",
-      artiste: "Génial ! Quel type de lieu recherchez-vous pour votre art ? (appartement, jardin, galerie, commerce…)"
+      spectateur: "Super ! Quelle ville vous intéresse, et pour quand ?",
+      hote: "Parfait ! Quel type d'artiste recherchez-vous ? (musique, théâtre, arts visuels…)",
+      artiste: "Génial ! Quel type de lieu pour votre art ? (appartement, jardin, galerie…)"
     };
     
     setMessages(prev => [...prev, {
@@ -46,9 +46,9 @@ const HormurWidget = () => {
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() || isLoading) return;
 
-    const userMessage = inputValue;
+    const userMessage = inputValue.trim();
     setInputValue('');
     
     setMessages(prev => [...prev, {
@@ -59,43 +59,73 @@ const HormurWidget = () => {
     setIsLoading(true);
 
     try {
+      console.log('📤 Envoi:', { message: userMessage, userProfile, sessionId });
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
       const response = await fetch('/.netlify/functions/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           message: userMessage,
-          userProfile: userProfile,
-          sessionId: sessionId
-        })
+          userProfile: userProfile || 'spectateur',
+          sessionId: sessionId || null,
+          timestamp: new Date().toISOString()
+        }),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+      console.log('📥 Status:', response.status);
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Erreur serveur:', errorText);
         throw new Error(`HTTP ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('✅ Réponse:', data);
       
+      // Mettre à jour le sessionId
       if (data.sessionId && !sessionId) {
         setSessionId(data.sessionId);
+        console.log('🔑 SessionId:', data.sessionId);
       }
 
       setMessages(prev => [...prev, {
         type: 'bot',
-        content: data.message,
-        results: data.results || [],
-        showCalendly: data.showCalendly || false
+        content: data.message || "Désolé, je n'ai pas de réponse.",
+        results: Array.isArray(data.results) ? data.results : [],
+        showCalendly: data.showCalendly === true
       }]);
 
     } catch (error) {
-      console.error('Erreur:', error);
+      console.error('❌ Erreur:', error);
+      
+      const errorMessage = error.name === 'AbortError' 
+        ? "La requête a pris trop de temps. Réessayez avec une question plus simple 🙏"
+        : "Problème technique. Pouvez-vous réessayer ? 🙏";
+      
       setMessages(prev => [...prev, {
         type: 'bot',
-        content: "Désolé, je rencontre un problème technique. Pouvez-vous réessayer ? 🙏",
+        content: errorMessage,
         results: [],
         showCalendly: true
       }]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -114,7 +144,16 @@ const HormurWidget = () => {
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
         border: '1px solid #f3f4f6',
         marginBottom: '12px',
-        transition: 'box-shadow 0.3s'
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        cursor: 'pointer'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
       }}>
         <div style={{ display: 'flex', gap: '12px' }}>
           <div style={{
@@ -125,9 +164,10 @@ const HormurWidget = () => {
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: '30px',
-            background: 'linear-gradient(135deg, #fce7f3 0%, #fed7aa 100%)'
+            background: 'linear-gradient(135deg, #fce7f3 0%, #fed7aa 100%)',
+            flexShrink: 0
           }}>
-            {result.image}
+            {result.image || '✨'}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
@@ -137,10 +177,10 @@ const HormurWidget = () => {
               fontSize: '12px',
               fontWeight: '500',
               color: 'white',
-              backgroundColor: typeColors[result.type],
+              backgroundColor: typeColors[result.type] || '#EE6553',
               marginBottom: '8px'
             }}>
-              {result.type.charAt(0).toUpperCase() + result.type.slice(1)}
+              {result.type ? result.type.charAt(0).toUpperCase() + result.type.slice(1) : 'Événement'}
             </div>
             <h4 style={{
               fontFamily: 'Georgia, serif',
@@ -152,31 +192,53 @@ const HormurWidget = () => {
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'
             }}>
-              {result.title}
+              {result.title || 'Sans titre'}
             </h4>
-            <p style={{ fontSize: '12px', color: '#6b7280' }}>
-              {result.city} {result.date && `• ${result.date}`}
+            <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>
+              {result.city || ''} {result.date && `• ${result.date}`}
             </p>
             {result.genre && (
-              <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>{result.genre}</p>
+              <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+                {result.genre}
+              </p>
+            )}
+            {result.price !== undefined && (
+              <p style={{ fontSize: '12px', color: '#059669', marginTop: '4px', fontWeight: '500' }}>
+                {result.price === 0 ? 'Gratuit' : `À partir de ${result.price}€`}
+              </p>
             )}
           </div>
         </div>
-        <button style={{
-          width: '100%',
-          marginTop: '12px',
-          background: 'linear-gradient(to right, #ef4444, #f97316)',
-          color: 'white',
-          padding: '8px 16px',
-          borderRadius: '9999px',
-          fontSize: '14px',
-          fontWeight: '500',
-          border: 'none',
-          cursor: 'pointer',
-          transition: 'all 0.3s'
-        }}>
-          Voir les détails
-        </button>
+        {result.url && (
+          <a
+            href={result.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              width: '100%',
+              marginTop: '12px',
+              background: 'linear-gradient(to right, #ef4444, #f97316)',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '9999px',
+              fontSize: '14px',
+              fontWeight: '500',
+              border: 'none',
+              cursor: 'pointer',
+              textAlign: 'center',
+              textDecoration: 'none',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '0.9';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '1';
+            }}>
+            Voir les détails
+          </a>
+        )}
       </div>
     );
   };
@@ -210,7 +272,14 @@ const HormurWidget = () => {
               color: '#EE6553',
               backgroundColor: 'transparent'
             }}
-          >
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#EE6553';
+              e.currentTarget.style.color = 'white';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = '#EE6553';
+            }}>
             {btn.label}
           </a>
         ))}
@@ -234,6 +303,10 @@ const HormurWidget = () => {
             opacity: 1;
             transform: translateY(0) scale(1);
           }
+        }
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
         }
         .hormur-scrollbar::-webkit-scrollbar { width: 6px; }
         .hormur-scrollbar::-webkit-scrollbar-track {
@@ -354,6 +427,8 @@ const HormurWidget = () => {
                     cursor: 'pointer',
                     transition: 'background-color 0.2s'
                   }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   aria-label="Fermer"
                 >
                   <X size={20} color="#323242" />
@@ -391,7 +466,7 @@ const HormurWidget = () => {
                             padding: '16px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                           }}>
-                            <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: 0 }}>
+                            <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: 0, whiteSpace: 'pre-line' }}>
                               {message.content}
                             </p>
                           </div>
@@ -414,6 +489,8 @@ const HormurWidget = () => {
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                                 }}
+                                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                               >
                                 <div style={{ fontSize: '24px', marginBottom: '4px' }}>🎟️</div>
                                 <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Événements</div>
@@ -429,6 +506,8 @@ const HormurWidget = () => {
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                                 }}
+                                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                               >
                                 <div style={{ fontSize: '24px', marginBottom: '4px' }}>🎨</div>
                                 <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Artistes</div>
@@ -444,6 +523,8 @@ const HormurWidget = () => {
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                                 }}
+                                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                               >
                                 <div style={{ fontSize: '24px', marginBottom: '4px' }}>🏡</div>
                                 <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Lieux</div>
@@ -451,7 +532,7 @@ const HormurWidget = () => {
                             </div>
                           )}
 
-                          {message.results && (
+                          {message.results && message.results.length > 0 && (
                             <div style={{ marginTop: '16px' }}>
                               {message.results.map((result, ridx) => (
                                 <ResultCard key={ridx} result={result} />
@@ -528,20 +609,24 @@ const HormurWidget = () => {
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    onKeyPress={handleKeyPress}
                     placeholder="Écrivez votre message..."
+                    disabled={isLoading}
                     style={{
                       flex: 1,
                       padding: '12px 16px',
                       borderRadius: '9999px',
                       border: '2px solid #DFDFE9',
                       fontSize: '14px',
-                      outline: 'none'
+                      outline: 'none',
+                      transition: 'border-color 0.2s'
                     }}
+                    onFocus={(e) => e.target.style.borderColor = '#EE6553'}
+                    onBlur={(e) => e.target.style.borderColor = '#DFDFE9'}
                   />
                   <button
                     onClick={handleSendMessage}
-                    disabled={!inputValue.trim()}
+                    disabled={!inputValue.trim() || isLoading}
                     style={{
                       width: '48px',
                       height: '48px',
@@ -552,9 +637,9 @@ const HormurWidget = () => {
                       color: 'white',
                       transition: 'all 0.3s',
                       border: 'none',
-                      cursor: inputValue.trim() ? 'pointer' : 'not-allowed',
-                      background: inputValue.trim() ? 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)' : '#DFDFE9',
-                      opacity: inputValue.trim() ? 1 : 0.5
+                      cursor: (inputValue.trim() && !isLoading) ? 'pointer' : 'not-allowed',
+                      background: (inputValue.trim() && !isLoading) ? 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)' : '#DFDFE9',
+                      opacity: (inputValue.trim() && !isLoading) ? 1 : 0.5
                     }}
                   >
                     <Send size={18} />
