@@ -7,7 +7,7 @@ const HormurWidget = () => {
   const [inputValue, setInputValue] = useState('');
   const [userProfile, setUserProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState(null); // ← AJOUTÉ
+  const [sessionId, setSessionId] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -20,7 +20,6 @@ const HormurWidget = () => {
 
   useEffect(() => {
     if (isOpen && messages.length === 0) {
-      // Message d'accueil initial
       setTimeout(() => {
         setMessages([{
           type: 'bot',
@@ -46,7 +45,6 @@ const HormurWidget = () => {
     }]);
   };
 
-  // ← FONCTION MODIFIÉE
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
@@ -77,7 +75,6 @@ const HormurWidget = () => {
 
       const data = await response.json();
       
-      // Sauvegarder la session
       if (data.sessionId && !sessionId) {
         setSessionId(data.sessionId);
       }
@@ -212,7 +209,7 @@ const HormurWidget = () => {
               textDecoration: 'none',
               border: '2px solid #EE6553',
               color: '#EE6553',
-              backgroundColor: btn.secondary ? 'transparent' : 'transparent'
+              backgroundColor: 'transparent'
             }}
           >
             {btn.label}
@@ -273,7 +270,6 @@ const HormurWidget = () => {
       `}</style>
 
       <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-        {/* Bouton flottant (état discret) */}
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="hormur-floating-btn"
@@ -300,10 +296,8 @@ const HormurWidget = () => {
           <MessageCircle color="white" size={24} />
         </button>
 
-        {/* Modale (état ouvert) */}
         {isOpen && (
           <>
-            {/* Overlay */}
             <div 
               style={{
                 position: 'fixed',
@@ -316,7 +310,6 @@ const HormurWidget = () => {
               onClick={() => setIsOpen(false)}
             />
             
-            {/* Widget modal */}
             <div 
               className="hormur-modal"
               style={{
@@ -337,7 +330,6 @@ const HormurWidget = () => {
                 zIndex: 9999
               }}
             >
-              {/* En-tête */}
               <div style={{
                 flexShrink: 0,
                 padding: '16px 20px',
@@ -386,7 +378,6 @@ const HormurWidget = () => {
                 </button>
               </div>
 
-              {/* Zone de messages scrollable */}
               <div className="hormur-scrollbar" style={{
                 flex: 1,
                 overflowY: 'auto',
@@ -423,7 +414,6 @@ const HormurWidget = () => {
                             </p>
                           </div>
                           
-                          {/* Boutons de profil */}
                           {message.showProfileButtons && !userProfile && (
                             <div style={{
                               display: 'grid',
@@ -479,7 +469,6 @@ const HormurWidget = () => {
                             </div>
                           )}
 
-                          {/* Résultats */}
                           {message.results && (
                             <div style={{ marginTop: '16px' }}>
                               {message.results.map((result, ridx) => (
@@ -488,7 +477,6 @@ const HormurWidget = () => {
                             </div>
                           )}
 
-                          {/* Boutons Calendly */}
                           {message.showCalendly && (
                             <CalendlyButtons profile={userProfile} />
                           )}
@@ -548,7 +536,6 @@ const HormurWidget = () => {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Zone de saisie */}
               <div style={{
                 flexShrink: 0,
                 padding: '16px',
