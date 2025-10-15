@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Sparkles } from 'lucide-react';
+import { MessageCircle, X, Send, Sparkles, Mic, Paperclip, StopCircle } from 'lucide-react';
 
 const HormurWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -8,7 +8,10 @@ const HormurWidget = () => {
   const [userProfile, setUserProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -30,12 +33,40 @@ const HormurWidget = () => {
     }
   }, [isOpen]);
 
+  const getEventTypeLabel = (type, subtype) => {
+    const labels = {
+      'spectacle': 'Spectacle',
+      'concert': 'Concert',
+      'exposition': 'Exposition',
+      'arts_numeriques': 'Arts numériques',
+      'atelier': 'Atelier artistique',
+      'evenement': 'Événement',
+      'artiste': 'Artiste',
+      'lieu': 'Lieu'
+    };
+    return labels[subtype || type] || 'Événement';
+  };
+
+  const getEventTypeColor = (type) => {
+    const colors = {
+      'spectacle': '#F18475',
+      'concert': '#EE7951',
+      'exposition': '#F5A398',
+      'arts_numeriques': '#EEB653',
+      'atelier': '#F1C575',
+      'evenement': '#EE6553',
+      'artiste': '#EE7951',
+      'lieu': '#F18475'
+    };
+    return colors[type] || '#EE6553';
+  };
+
   const handleProfileSelect = (profile) => {
     setUserProfile(profile);
     const profileMessages = {
       spectateur: "Super ! Quelle ville vous intéresse, et pour quand ?",
-      hote: "Parfait ! Quel type d'artiste recherchez-vous ? (musique, théâtre, arts visuels…)",
-      artiste: "Génial ! Quel type de lieu pour votre art ? (appartement, jardin, galerie…)"
+      artiste: "Génial ! Quel type de lieu pour votre art ? (appartement, jardin, galerie…)",
+      hote: "Parfait ! Quel type d'artiste recherchez-vous ? (musique, théâtre, arts visuels…)"
     };
     
     setMessages(prev => [...prev, {
@@ -43,6 +74,47 @@ const HormurWidget = () => {
       content: profileMessages[profile],
       profile: profile
     }]);
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setMessages(prev => [...prev, {
+        type: 'user',
+        content: `📎 Fichier envoyé : ${file.name}`
+      }]);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      
+      const chunks = [];
+      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        setMessages(prev => [...prev, {
+          type: 'user',
+          content: `🎤 Message vocal enregistré`
+        }]);
+      };
+      
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Erreur microphone:', error);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
+    }
   };
 
   const handleSendMessage = async () => {
@@ -59,10 +131,8 @@ const HormurWidget = () => {
     setIsLoading(true);
 
     try {
-      console.log('📤 Envoi:', { message: userMessage, userProfile, sessionId });
-      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       const response = await fetch('/.netlify/functions/chat', {
         method: 'POST',
@@ -80,21 +150,15 @@ const HormurWidget = () => {
       });
 
       clearTimeout(timeoutId);
-      console.log('📥 Status:', response.status);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Erreur serveur:', errorText);
         throw new Error(`HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('✅ Réponse:', data);
       
-      // Mettre à jour le sessionId
       if (data.sessionId && !sessionId) {
         setSessionId(data.sessionId);
-        console.log('🔑 SessionId:', data.sessionId);
       }
 
       setMessages(prev => [...prev, {
@@ -105,8 +169,6 @@ const HormurWidget = () => {
       }]);
 
     } catch (error) {
-      console.error('❌ Erreur:', error);
-      
       const errorMessage = error.name === 'AbortError' 
         ? "La requête a pris trop de temps. Réessayez avec une question plus simple 🙏"
         : "Problème technique. Pouvez-vous réessayer ? 🙏";
@@ -129,116 +191,171 @@ const HormurWidget = () => {
     }
   };
 
+  const extractYouTubeId = (url) => {
+    if (!url) return null;
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[7].length === 11) ? match[7] : null;
+  };
+
   const ResultCard = ({ result }) => {
-    const typeColors = {
-      'événement': '#EEB653',
-      'artiste': '#EE7951',
-      'lieu': '#F18475'
-    };
+    const youtubeId = extractYouTubeId(result.video_url);
+    const eventType = result.subtype || result.type || 'evenement';
 
     return (
       <div style={{
         backgroundColor: 'white',
-        borderRadius: '12px',
-        padding: '16px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        border: '1px solid #f3f4f6',
+        borderRadius: '16px',
+        padding: '0',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        border: '1px solid #DFDFE9',
         marginBottom: '12px',
+        overflow: 'hidden',
         transition: 'transform 0.2s, box-shadow 0.2s',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        maxWidth: '100%'
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.15)';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
       }}>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        
+        {youtubeId ? (
           <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '8px',
+            width: '100%',
+            paddingBottom: '56.25%',
+            position: 'relative',
+            backgroundColor: '#000'
+          }}>
+            <iframe
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                border: 'none'
+              }}
+              src={`https://www.youtube.com/embed/${youtubeId}`}
+              title="Vidéo de présentation"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        ) : result.image_url ? (
+          <img 
+            src={result.image_url} 
+            alt={result.title}
+            style={{
+              width: '100%',
+              height: '180px',
+              objectFit: 'cover'
+            }}
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
+          />
+        ) : (
+          <div style={{
+            width: '100%',
+            height: '180px',
+            background: 'linear-gradient(135deg, #FCE5DD 0%, #F8DDD2 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '30px',
-            background: 'linear-gradient(135deg, #fce7f3 0%, #fed7aa 100%)',
-            flexShrink: 0
+            fontSize: '48px'
           }}>
-            {result.image || '✨'}
+            {result.type === 'artiste' ? '🎨' : result.type === 'lieu' ? '🏡' : '✨'}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              display: 'inline-block',
-              padding: '4px 12px',
-              borderRadius: '12px',
-              fontSize: '12px',
-              fontWeight: '500',
-              color: 'white',
-              backgroundColor: typeColors[result.type] || '#EE6553',
-              marginBottom: '8px'
-            }}>
-              {result.type ? result.type.charAt(0).toUpperCase() + result.type.slice(1) : 'Événement'}
-            </div>
-            <h4 style={{
-              fontFamily: 'Georgia, serif',
-              fontWeight: 'bold',
-              fontSize: '14px',
-              color: '#1f2937',
-              marginBottom: '4px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>
-              {result.title || 'Sans titre'}
-            </h4>
-            <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>
-              {result.city || ''} {result.date && `• ${result.date}`}
-            </p>
-            {result.genre && (
-              <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
-                {result.genre}
-              </p>
-            )}
-            {result.price !== undefined && (
-              <p style={{ fontSize: '12px', color: '#059669', marginTop: '4px', fontWeight: '500' }}>
-                {result.price === 0 ? 'Gratuit' : `À partir de ${result.price}€`}
-              </p>
-            )}
-          </div>
-        </div>
-        {result.url && (
-          <a
-            href={result.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'block',
-              width: '100%',
-              marginTop: '12px',
-              background: 'linear-gradient(to right, #ef4444, #f97316)',
-              color: 'white',
-              padding: '8px 16px',
-              borderRadius: '9999px',
-              fontSize: '14px',
-              fontWeight: '500',
-              border: 'none',
-              cursor: 'pointer',
-              textAlign: 'center',
-              textDecoration: 'none',
-              transition: 'all 0.3s'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '0.9';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '1';
-            }}>
-            Voir les détails
-          </a>
         )}
+
+        <div style={{ padding: '16px' }}>
+          <div style={{
+            display: 'inline-block',
+            padding: '4px 12px',
+            borderRadius: '12px',
+            fontSize: '11px',
+            fontWeight: '600',
+            color: 'white',
+            backgroundColor: getEventTypeColor(eventType),
+            marginBottom: '10px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>
+            {getEventTypeLabel(result.type, eventType)}
+          </div>
+          
+          <h4 style={{
+            fontFamily: 'Georgia, serif',
+            fontWeight: 'bold',
+            fontSize: '16px',
+            color: '#323242',
+            marginBottom: '8px',
+            lineHeight: '1.3',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden'
+          }}>
+            {result.title || 'Sans titre'}
+          </h4>
+          
+          {(result.city || result.date) && (
+            <p style={{ fontSize: '13px', color: '#5E5E8F', margin: '0 0 6px 0', fontWeight: '500' }}>
+              {result.city}{result.city && result.date ? ' • ' : ''}{result.date}
+            </p>
+          )}
+          
+          {result.genre && (
+            <p style={{ fontSize: '12px', color: '#7E7EA5', marginTop: '6px' }}>
+              {result.genre}
+            </p>
+          )}
+          
+          {result.price !== undefined && (
+            <p style={{ fontSize: '13px', color: '#EE7951', marginTop: '8px', fontWeight: '600' }}>
+              {result.price === 0 ? 'Gratuit' : `À partir de ${result.price}€`}
+            </p>
+          )}
+          
+          {result.url && (
+            <a
+              href={result.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                width: '100%',
+                marginTop: '14px',
+                background: 'linear-gradient(to right, #ef4444, #f97316)',
+                color: 'white',
+                padding: '12px 20px',
+                borderRadius: '9999px',
+                fontSize: '14px',
+                fontWeight: '600',
+                border: 'none',
+                cursor: 'pointer',
+                textAlign: 'center',
+                textDecoration: 'none',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '0.9';
+                e.currentTarget.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '1';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+              onClick={(e) => e.stopPropagation()}>
+              Voir les détails
+            </a>
+          )}
+        </div>
       </div>
     );
   };
@@ -308,9 +425,13 @@ const HormurWidget = () => {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-5px); }
         }
+        @keyframes recordPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
         .hormur-scrollbar::-webkit-scrollbar { width: 6px; }
         .hormur-scrollbar::-webkit-scrollbar-track {
-          background: #FCE5DD;
+          background: #F8DDD2;
           border-radius: 10px;
         }
         .hormur-scrollbar::-webkit-scrollbar-thumb {
@@ -322,6 +443,7 @@ const HormurWidget = () => {
         }
         .hormur-floating-btn { animation: pulse 2s ease-in-out infinite; }
         .hormur-modal { animation: slideUp 0.3s ease-out; }
+        .recording-indicator { animation: recordPulse 1.5s ease-in-out infinite; }
       `}</style>
 
       <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -332,8 +454,8 @@ const HormurWidget = () => {
             position: 'fixed',
             bottom: '20px',
             right: '20px',
-            width: '56px',
-            height: '56px',
+            width: '60px',
+            height: '60px',
             borderRadius: '50%',
             boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
             display: 'flex',
@@ -348,7 +470,7 @@ const HormurWidget = () => {
           }}
           aria-label="Ouvrir l'assistant Hormur"
         >
-          <MessageCircle color="white" size={24} />
+          <MessageCircle color="white" size={26} />
         </button>
 
         {isOpen && (
@@ -369,14 +491,13 @@ const HormurWidget = () => {
               className="hormur-modal"
               style={{
                 position: 'fixed',
-                bottom: '20px',
-                right: '20px',
-                width: '90vw',
-                maxWidth: '420px',
-                height: '85vh',
-                maxHeight: '600px',
+                bottom: window.innerWidth <= 768 ? '0' : '20px',
+                right: window.innerWidth <= 768 ? '0' : '20px',
+                left: window.innerWidth <= 768 ? '0' : 'auto',
+                width: window.innerWidth <= 768 ? '100%' : 'min(420px, 90vw)',
+                height: window.innerWidth <= 768 ? '100vh' : 'min(600px, 85vh)',
                 backgroundColor: 'white',
-                borderRadius: '24px',
+                borderRadius: window.innerWidth <= 768 ? '0' : '24px',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -396,20 +517,23 @@ const HormurWidget = () => {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{
-                    width: '40px',
-                    height: '40px',
+                    width: '42px',
+                    height: '42px',
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)'
+                    backgroundColor: '#EE6553',
+                    flexShrink: 0
                   }}>
-                    H
+                    <svg width="24" height="24" viewBox="0 0 100 100" fill="white">
+                      <path d="M20,20 L20,80 L35,80 L35,55 L50,65 L50,80 L65,80 L65,20 L50,20 L50,45 L35,35 L35,20 Z" />
+                      <circle cx="80" cy="50" r="15" fill="white" />
+                      <circle cx="80" cy="50" r="8" fill="#EE6553" />
+                    </svg>
                   </div>
                   <div>
-                    <h3 style={{ fontFamily: 'Georgia, serif', fontWeight: 'bold', fontSize: '16px', color: '#323242', margin: 0 }}>
+                    <h3 style={{ fontFamily: 'Georgia, serif', fontWeight: 'bold', fontSize: '17px', color: '#323242', margin: 0 }}>
                       Hormur
                     </h3>
                     <p style={{ fontSize: '12px', opacity: 0.7, color: '#323242', margin: 0 }}>
@@ -425,26 +549,28 @@ const HormurWidget = () => {
                     border: 'none',
                     backgroundColor: 'transparent',
                     cursor: 'pointer',
-                    transition: 'background-color 0.2s'
+                    transition: 'background-color 0.2s',
+                    flexShrink: 0
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FCE5DD'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   aria-label="Fermer"
                 >
-                  <X size={20} color="#323242" />
+                  <X size={22} color="#323242" />
                 </button>
               </div>
 
               <div className="hormur-scrollbar" style={{
                 flex: 1,
                 overflowY: 'auto',
+                overflowX: 'hidden',
                 padding: '20px',
                 backgroundColor: '#FFFFFF'
               }}>
                 {messages.map((message, idx) => (
                   <div key={idx} style={{ marginBottom: '16px' }}>
                     {message.type === 'bot' ? (
-                      <div style={{ display: 'flex', gap: '12px' }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                         <div style={{
                           width: '32px',
                           height: '32px',
@@ -452,19 +578,21 @@ const HormurWidget = () => {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: 'white',
+                          backgroundColor: '#FCE0DD',
                           flexShrink: 0,
-                          background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)'
+                          marginTop: '2px'
                         }}>
-                          <Sparkles size={16} />
+                          <Sparkles size={16} color="#EE6553" />
                         </div>
-                        <div style={{ flex: 1 }}>
+                        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%' }}>
                           <div style={{
-                            background: 'linear-gradient(135deg, #fce7f3 0%, #fed7aa 100%)',
+                            background: '#FCE5DD',
                             borderRadius: '16px',
                             borderTopLeftRadius: '4px',
-                            padding: '16px',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                            padding: '14px 16px',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                            wordWrap: 'break-word',
+                            overflowWrap: 'break-word'
                           }}>
                             <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: 0, whiteSpace: 'pre-line' }}>
                               {message.content}
@@ -482,58 +610,76 @@ const HormurWidget = () => {
                                 onClick={() => handleProfileSelect('spectateur')}
                                 style={{
                                   backgroundColor: 'white',
-                                  border: '2px solid #EEB653',
+                                  border: '2px solid #F5D398',
                                   borderRadius: '12px',
-                                  padding: '12px',
+                                  padding: '12px 8px',
                                   cursor: 'pointer',
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(-2px)';
+                                  e.currentTarget.style.borderColor = '#EEB653';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.borderColor = '#F5D398';
+                                }}
                               >
-                                <div style={{ fontSize: '24px', marginBottom: '4px' }}>🎟️</div>
-                                <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Événements</div>
+                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎟️</div>
+                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Événements</div>
                               </button>
                               <button
                                 onClick={() => handleProfileSelect('artiste')}
                                 style={{
                                   backgroundColor: 'white',
-                                  border: '2px solid #EE7951',
+                                  border: '2px solid #F5AF97',
                                   borderRadius: '12px',
-                                  padding: '12px',
+                                  padding: '12px 8px',
                                   cursor: 'pointer',
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(-2px)';
+                                  e.currentTarget.style.borderColor = '#EE7951';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.borderColor = '#F5AF97';
+                                }}
                               >
-                                <div style={{ fontSize: '24px', marginBottom: '4px' }}>🎨</div>
-                                <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Artistes</div>
+                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎵</div>
+                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Artistes</div>
                               </button>
                               <button
                                 onClick={() => handleProfileSelect('hote')}
                                 style={{
                                   backgroundColor: 'white',
-                                  border: '2px solid #F18475',
+                                  border: '2px solid #F5A398',
                                   borderRadius: '12px',
-                                  padding: '12px',
+                                  padding: '12px 8px',
                                   cursor: 'pointer',
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                                onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(-2px)';
+                                  e.currentTarget.style.borderColor = '#F18475';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.borderColor = '#F5A398';
+                                }}
                               >
-                                <div style={{ fontSize: '24px', marginBottom: '4px' }}>🏡</div>
-                                <div style={{ fontSize: '12px', fontWeight: '500', color: '#323242' }}>Lieux</div>
+                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🏡</div>
+                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Lieux</div>
                               </button>
                             </div>
                           )}
 
                           {message.results && message.results.length > 0 && (
-                            <div style={{ marginTop: '16px' }}>
+                            <div style={{ marginTop: '16px', width: '100%' }}>
                               {message.results.map((result, ridx) => (
                                 <ResultCard key={ridx} result={result} />
                               ))}
@@ -548,13 +694,15 @@ const HormurWidget = () => {
                     ) : (
                       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                         <div style={{
-                          background: 'linear-gradient(to right, #ef4444, #f97316)',
+                          background: '#7E7EA5',
                           color: 'white',
                           borderRadius: '16px',
                           borderTopRightRadius: '4px',
-                          padding: '16px',
-                          maxWidth: '75%',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                          padding: '14px 16px',
+                          maxWidth: '80%',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                          wordWrap: 'break-word',
+                          overflowWrap: 'break-word'
                         }}>
                           <p style={{ fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
                             {message.content}
@@ -566,7 +714,7 @@ const HormurWidget = () => {
                 ))}
 
                 {isLoading && (
-                  <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                     <div style={{
                       width: '32px',
                       height: '32px',
@@ -574,22 +722,22 @@ const HormurWidget = () => {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: 'white',
-                      background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)'
+                      backgroundColor: '#FCE0DD',
+                      flexShrink: 0
                     }}>
-                      <Sparkles size={16} />
+                      <Sparkles size={16} color="#EE6553" />
                     </div>
                     <div style={{
-                      background: 'linear-gradient(135deg, #fce7f3 0%, #fed7aa 100%)',
+                      background: '#FCE5DD',
                       borderRadius: '16px',
                       borderTopLeftRadius: '4px',
                       padding: '16px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
                     }}>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite' }} />
-                        <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite 0.15s' }} />
-                        <div style={{ width: '8px', height: '8px', backgroundColor: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite 0.3s' }} />
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        <div style={{ width: '8px', height: '8px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite' }} />
+                        <div style={{ width: '8px', height: '8px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite 0.15s' }} />
+                        <div style={{ width: '8px', height: '8px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite 0.3s' }} />
                       </div>
                     </div>
                   </div>
@@ -602,31 +750,93 @@ const HormurWidget = () => {
                 flexShrink: 0,
                 padding: '16px',
                 borderTop: '1px solid #DFDFE9',
-                backgroundColor: '#FCE5DD'
+                backgroundColor: '#FEF6F4'
               }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    style={{ display: 'none' }}
+                    accept="image/*,.pdf,.doc,.docx"
+                  />
+                  
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isLoading || isRecording}
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      border: '2px solid #DFDFE9',
+                      backgroundColor: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: (isLoading || isRecording) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      flexShrink: 0,
+                      opacity: (isLoading || isRecording) ? 0.5 : 1
+                    }}
+                    onMouseEnter={(e) => !isLoading && !isRecording && (e.currentTarget.style.borderColor = '#7E7EA5')}
+                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#DFDFE9')}
+                  >
+                    <Paperclip size={18} color="#5E5E8F" />
+                  </button>
+
+                  <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    disabled={isLoading}
+                    className={isRecording ? 'recording-indicator' : ''}
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      border: '2px solid #DFDFE9',
+                      backgroundColor: isRecording ? '#EE6553' : 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: isLoading ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      flexShrink: 0,
+                      opacity: isLoading ? 0.5 : 1
+                    }}
+                    onMouseEnter={(e) => !isLoading && !isRecording && (e.currentTarget.style.borderColor = '#7E7EA5')}
+                    onMouseLeave={(e) => !isRecording && (e.currentTarget.style.borderColor = '#DFDFE9')}
+                  >
+                    {isRecording ? (
+                      <StopCircle size={18} color="white" />
+                    ) : (
+                      <Mic size={18} color="#5E5E8F" />
+                    )}
+                  </button>
+                  
                   <input
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Écrivez votre message..."
-                    disabled={isLoading}
+                    disabled={isLoading || isRecording}
                     style={{
                       flex: 1,
-                      padding: '12px 16px',
+                      padding: '11px 16px',
                       borderRadius: '9999px',
                       border: '2px solid #DFDFE9',
                       fontSize: '14px',
                       outline: 'none',
-                      transition: 'border-color 0.2s'
+                      transition: 'border-color 0.2s',
+                      backgroundColor: (isLoading || isRecording) ? '#f9fafb' : 'white',
+                      minWidth: 0
                     }}
-                    onFocus={(e) => e.target.style.borderColor = '#EE6553'}
-                    onBlur={(e) => e.target.style.borderColor = '#DFDFE9'}
+                    onFocus={(e) => !isRecording && (e.target.style.borderColor = '#7E7EA5')}
+                    onBlur={(e) => (e.target.style.borderColor = '#DFDFE9')}
                   />
+                  
                   <button
                     onClick={handleSendMessage}
-                    disabled={!inputValue.trim() || isLoading}
+                    disabled={!inputValue.trim() || isLoading || isRecording}
                     style={{
                       width: '48px',
                       height: '48px',
@@ -637,18 +847,21 @@ const HormurWidget = () => {
                       color: 'white',
                       transition: 'all 0.3s',
                       border: 'none',
-                      cursor: (inputValue.trim() && !isLoading) ? 'pointer' : 'not-allowed',
-                      background: (inputValue.trim() && !isLoading) ? 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)' : '#DFDFE9',
-                      opacity: (inputValue.trim() && !isLoading) ? 1 : 0.5
+                      cursor: (inputValue.trim() && !isLoading && !isRecording) ? 'pointer' : 'not-allowed',
+                      background: (inputValue.trim() && !isLoading && !isRecording) ? 'linear-gradient(to right, #ef4444, #f97316)' : '#DFDFE9',
+                      opacity: (inputValue.trim() && !isLoading && !isRecording) ? 1 : 0.6,
+                      flexShrink: 0
                     }}
+                    onMouseEnter={(e) => (inputValue.trim() && !isLoading && !isRecording) && (e.currentTarget.style.opacity = '0.9')}
+                    onMouseLeave={(e) => (e.currentTarget.style.opacity = (inputValue.trim() && !isLoading && !isRecording) ? '1' : '0.6')}
                   >
-                    <Send size={18} />
+                    <Send size={20} />
                   </button>
                 </div>
                 <p style={{
                   textAlign: 'center',
-                  fontSize: '12px',
-                  marginTop: '8px',
+                  fontSize: '11px',
+                  marginTop: '10px',
                   opacity: 0.6,
                   color: '#323242'
                 }}>
