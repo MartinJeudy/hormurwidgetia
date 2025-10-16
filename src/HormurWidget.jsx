@@ -27,19 +27,19 @@ const HormurWidget = () => {
       setTimeout(() => {
         setMessages([{
           type: 'bot',
-          content: "Bonjour 👋 Je suis l'assistant Hormur. Vous cherchez un événement, un artiste ou un lieu ?",
+          content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un evenement, un artiste ou un lieu ?",
           showProfileButtons: true
         }]);
       }, 300);
     }
-  }, [isOpen]);
+  }, [isOpen, messages.length]);
 
   const handleProfileSelect = (profile) => {
     setUserProfile(profile);
     const profileMessages = {
-      spectateur: "Super ! Quelle ville vous intéresse, et pour quand ?",
-      artiste: "Génial ! Quel type de lieu pour votre art ? (appartement, jardin, galerie…)",
-      hote: "Parfait ! Quel type d'artiste recherchez-vous ? (musique, théâtre, arts visuels…)"
+      spectateur: "Super ! Quelle ville vous interesse, et pour quand ?",
+      artiste: "Genial ! Quel type de lieu pour votre art ? (appartement, jardin, galerie...)",
+      hote: "Parfait ! Quel type d'artiste recherchez-vous ? (musique, theatre, arts visuels...)"
     };
     
     setMessages(prev => [...prev, {
@@ -71,8 +71,8 @@ const HormurWidget = () => {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64Audio = reader.result.split(',')[1];
-          setTranscribedText(`[Audio enregistré - ${Math.round(audioBlob.size / 1024)}KB]`);
-          setInputValue(`[Message vocal - en attente de transcription]`);
+          setTranscribedText('[Audio enregistre - ' + Math.round(audioBlob.size / 1024) + 'KB]');
+          setInputValue('[Message vocal - en attente de transcription]');
         };
         reader.readAsDataURL(audioBlob);
         
@@ -83,7 +83,7 @@ const HormurWidget = () => {
       setIsRecording(true);
     } catch (error) {
       console.error('Erreur microphone:', error);
-      alert('Impossible d\'accéder au microphone. Vérifiez les permissions.');
+      alert('Impossible d\'acceder au microphone. Verifiez les permissions.');
     }
   };
 
@@ -130,7 +130,7 @@ const HormurWidget = () => {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error('HTTP ' + response.status);
       }
 
       const data = await response.json();
@@ -141,15 +141,15 @@ const HormurWidget = () => {
 
       setMessages(prev => [...prev, {
         type: 'bot',
-        content: data.message || "Désolé, je n'ai pas de réponse.",
+        content: data.message || "Desole, je n'ai pas de reponse.",
         results: Array.isArray(data.results) ? data.results : [],
         showCalendly: data.showCalendly === true
       }]);
 
     } catch (error) {
       const errorMessage = error.name === 'AbortError' 
-        ? "La requête a pris trop de temps. Réessayez avec une question plus simple 🙏"
-        : "Problème technique. Pouvez-vous réessayer ? 🙏";
+        ? "La requete a pris trop de temps. Reessayez avec une question plus simple"
+        : "Probleme technique. Pouvez-vous reessayer ?";
       
       setMessages(prev => [...prev, {
         type: 'bot',
@@ -219,8 +219,8 @@ const HormurWidget = () => {
                 height: '100%',
                 border: 'none'
               }}
-              src={`https://www.youtube.com/embed/${youtubeId}`}
-              title="Vidéo de présentation"
+              src={'https://www.youtube.com/embed/' + youtubeId}
+              title="Video de presentation"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
@@ -332,7 +332,7 @@ const HormurWidget = () => {
                 e.currentTarget.style.transform = 'scale(1)';
               }}
               onClick={(e) => e.stopPropagation()}>
-              Voir les détails
+              Voir les details
             </a>
           )}
         </div>
@@ -342,8 +342,8 @@ const HormurWidget = () => {
 
   const CalendlyButtons = ({ profile }) => {
     const buttons = profile === 'artiste' 
-      ? [{ label: '💬 Discuter avec Éléonore', url: 'https://calendly.com/eleonore-hormur/15min' }] 
-      : [{ label: '💬 Échanger avec Martin', url: 'https://calendly.com/martin-jeudy/15min' }];
+      ? [{ label: 'Discuter avec Eleonore', url: 'https://calendly.com/eleonore-hormur/15min' }] 
+      : [{ label: 'Echanger avec Martin', url: 'https://calendly.com/martin-jeudy/15min' }];
 
     return (
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -518,7 +518,7 @@ const HormurWidget = () => {
                       Hormur
                     </h3>
                     <p style={{ fontSize: '12px', opacity: 0.7, color: '#323242', margin: 0 }}>
-                      L'art où on ne l'attend pas
+                      L'art ou on ne l'attend pas
                     </p>
                   </div>
                 </div>
@@ -609,7 +609,7 @@ const HormurWidget = () => {
                                 }}
                               >
                                 <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎟️</div>
-                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Événements</div>
+                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Evenements</div>
                               </button>
                               <button
                                 onClick={() => handleProfileSelect('artiste')}
@@ -770,7 +770,7 @@ const HormurWidget = () => {
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Écrivez votre message..."
+                    placeholder="Ecrivez votre message..."
                     disabled={isLoading || isRecording}
                     style={{
                       flex: 1,
@@ -818,7 +818,7 @@ const HormurWidget = () => {
                   opacity: 0.6,
                   color: '#323242'
                 }}>
-                  Hormur — L'art où on ne l'attend pas
+                  Hormur - L'art ou on ne l'attend pas
                 </p>
               </div>
             </div>
