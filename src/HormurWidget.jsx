@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Sparkles, Mic, Paperclip, StopCircle } from 'lucide-react';
+import { MessageCircle, X, Send, Sparkles, Mic, StopCircle } from 'lucide-react';
 
 const HormurWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -9,9 +9,10 @@ const HormurWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [transcribedText, setTranscribedText] = useState('');
   const messagesEndRef = useRef(null);
-  const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -76,52 +77,57 @@ const HormurWidget = () => {
     }]);
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setMessages(prev => [...prev, {
-        type: 'user',
-        content: `📎 Fichier envoyé : ${file.name}`
-      }]);
-    }
-  };
-
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
       
-      const chunks = [];
-      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        setMessages(prev => [...prev, {
-          type: 'user',
-          content: `🎤 Message vocal enregistré`
-        }]);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+      
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Audio = reader.result.split(',')[1];
+          setTranscribedText(`[Audio enregistré - ${Math.round(audioBlob.size / 1024)}KB]`);
+          setInputValue(`[Message vocal - en attente de transcription]`);
+        };
+        reader.readAsDataURL(audioBlob);
+        
+        stream.getTracks().forEach(track => track.stop());
       };
       
       mediaRecorder.start();
       setIsRecording(true);
     } catch (error) {
       console.error('Erreur microphone:', error);
+      alert('Impossible d\'accéder au microphone. Vérifiez les permissions.');
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       setIsRecording(false);
     }
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    if ((!inputValue.trim() && !transcribedText) || isLoading) return;
 
-    const userMessage = inputValue.trim();
+    const userMessage = inputValue.trim() || transcribedText;
     setInputValue('');
+    setTranscribedText('');
     
     setMessages(prev => [...prev, {
       type: 'user',
@@ -201,6 +207,7 @@ const HormurWidget = () => {
   const ResultCard = ({ result }) => {
     const youtubeId = extractYouTubeId(result.video_url);
     const eventType = result.subtype || result.type || 'evenement';
+    const hasMedia = youtubeId || result.image_url;
 
     return (
       <div style={{
@@ -210,10 +217,9 @@ const HormurWidget = () => {
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
         border: '1px solid #DFDFE9',
         marginBottom: '12px',
-        overflow: 'hidden',
         transition: 'transform 0.2s, box-shadow 0.2s',
         cursor: 'pointer',
-        maxWidth: '100%'
+        width: '100%'
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-2px)';
@@ -229,7 +235,10 @@ const HormurWidget = () => {
             width: '100%',
             paddingBottom: '56.25%',
             position: 'relative',
-            backgroundColor: '#000'
+            backgroundColor: '#000',
+            borderTopLeftRadius: '16px',
+            borderTopRightRadius: '16px',
+            overflow: 'hidden'
           }}>
             <iframe
               style={{
@@ -253,7 +262,9 @@ const HormurWidget = () => {
             style={{
               width: '100%',
               height: '180px',
-              objectFit: 'cover'
+              objectFit: 'cover',
+              borderTopLeftRadius: '16px',
+              borderTopRightRadius: '16px'
             }}
             onError={(e) => {
               e.target.style.display = 'none';
@@ -267,34 +278,21 @@ const HormurWidget = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '48px'
+            fontSize: '48px',
+            borderTopLeftRadius: '16px',
+            borderTopRightRadius: '16px'
           }}>
             {result.type === 'artiste' ? '🎨' : result.type === 'lieu' ? '🏡' : '✨'}
           </div>
         )}
 
         <div style={{ padding: '16px' }}>
-          <div style={{
-            display: 'inline-block',
-            padding: '4px 12px',
-            borderRadius: '12px',
-            fontSize: '11px',
-            fontWeight: '600',
-            color: 'white',
-            backgroundColor: getEventTypeColor(eventType),
-            marginBottom: '10px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px'
-          }}>
-            {getEventTypeLabel(result.type, eventType)}
-          </div>
-          
           <h4 style={{
             fontFamily: 'Georgia, serif',
             fontWeight: 'bold',
-            fontSize: '16px',
+            fontSize: '17px',
             color: '#323242',
-            marginBottom: '8px',
+            marginBottom: '10px',
             lineHeight: '1.3',
             display: '-webkit-box',
             WebkitLineClamp: 2,
@@ -305,25 +303,36 @@ const HormurWidget = () => {
           </h4>
           
           {(result.city || result.date) && (
-            <p style={{ fontSize: '13px', color: '#5E5E8F', margin: '0 0 6px 0', fontWeight: '500' }}>
+            <p style={{ fontSize: '14px', color: '#5E5E8F', margin: '0 0 8px 0', fontWeight: '500' }}>
               {result.city}{result.city && result.date ? ' • ' : ''}{result.date}
             </p>
           )}
           
           {result.genre && (
-            <p style={{ fontSize: '12px', color: '#7E7EA5', marginTop: '6px' }}>
+            <p style={{ 
+              fontSize: '13px', 
+              color: '#7E7EA5', 
+              marginTop: '6px',
+              marginBottom: '10px'
+            }}>
               {result.genre}
             </p>
           )}
           
-          {result.price !== undefined && (
-            <p style={{ fontSize: '13px', color: '#EE7951', marginTop: '8px', fontWeight: '600' }}>
-              {result.price === 0 ? 'Gratuit' : `À partir de ${result.price}€`}
+          {result.visualPrice && (
+            <p style={{ 
+              fontSize: '14px', 
+              color: '#EE7951', 
+              marginTop: '10px',
+              marginBottom: '14px',
+              fontWeight: '600' 
+            }}>
+              {result.visualPrice}
             </p>
           )}
           
           {result.url && (
-            <a
+            
               href={result.url}
               target="_blank"
               rel="noopener noreferrer"
@@ -341,7 +350,8 @@ const HormurWidget = () => {
                 cursor: 'pointer',
                 textAlign: 'center',
                 textDecoration: 'none',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s',
+                boxSizing: 'border-box'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.opacity = '0.9';
@@ -362,16 +372,13 @@ const HormurWidget = () => {
 
   const CalendlyButtons = ({ profile }) => {
     const buttons = profile === 'artiste' 
-      ? [{ label: '💬 Discuter avec Éléonore (15 min)', url: 'https://calendly.com/eleonore-hormur/15min' }] 
-      : [
-          { label: '💬 Échanger avec Martin (15 min)', url: 'https://calendly.com/martin-jeudy/15min' },
-          { label: '🤝 Rendez-vous stratégique (30 min)', url: 'https://calendly.com/martin-jeudy/30min', secondary: true }
-        ];
+      ? [{ label: '💬 Discuter avec Éléonore', url: 'https://calendly.com/eleonore-hormur/15min' }] 
+      : [{ label: '💬 Échanger avec Martin', url: 'https://calendly.com/martin-jeudy/15min' }];
 
     return (
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {buttons.map((btn, idx) => (
-          <a
+          
             key={idx}
             href={btn.url}
             target="_blank"
@@ -426,8 +433,8 @@ const HormurWidget = () => {
           50% { transform: translateY(-5px); }
         }
         @keyframes recordPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(1.1); }
         }
         .hormur-scrollbar::-webkit-scrollbar { width: 6px; }
         .hormur-scrollbar::-webkit-scrollbar-track {
@@ -443,7 +450,7 @@ const HormurWidget = () => {
         }
         .hormur-floating-btn { animation: pulse 2s ease-in-out infinite; }
         .hormur-modal { animation: slideUp 0.3s ease-out; }
-        .recording-indicator { animation: recordPulse 1.5s ease-in-out infinite; }
+        .recording-indicator { animation: recordPulse 1s ease-in-out infinite; }
       `}</style>
 
       <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -454,8 +461,8 @@ const HormurWidget = () => {
             position: 'fixed',
             bottom: '20px',
             right: '20px',
-            width: '60px',
-            height: '60px',
+            width: '64px',
+            height: '64px',
             borderRadius: '50%',
             boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
             display: 'flex',
@@ -466,11 +473,15 @@ const HormurWidget = () => {
             border: 'none',
             cursor: 'pointer',
             transform: isOpen ? 'scale(0)' : 'scale(1)',
-            opacity: isOpen ? 0 : 1
+            opacity: isOpen ? 0 : 1,
+            backgroundImage: isOpen ? 'none' : 'url(/icone-logo-hormur.svg)',
+            backgroundSize: '32px 32px',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat'
           }}
           aria-label="Ouvrir l'assistant Hormur"
         >
-          <MessageCircle color="white" size={26} />
+          {!isOpen && <MessageCircle color="white" size={28} />}
         </button>
 
         {isOpen && (
@@ -495,13 +506,12 @@ const HormurWidget = () => {
                 right: window.innerWidth <= 768 ? '0' : '20px',
                 left: window.innerWidth <= 768 ? '0' : 'auto',
                 width: window.innerWidth <= 768 ? '100%' : 'min(420px, 90vw)',
-                height: window.innerWidth <= 768 ? '100vh' : 'min(600px, 85vh)',
+                height: window.innerWidth <= 768 ? '100dvh' : 'min(600px, 85vh)',
                 backgroundColor: 'white',
                 borderRadius: window.innerWidth <= 768 ? '0' : '24px',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'hidden',
                 transition: 'all 0.3s',
                 zIndex: 9999
               }}
@@ -513,7 +523,10 @@ const HormurWidget = () => {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 borderBottom: '1px solid #DFDFE9',
-                backgroundColor: '#FEF6F4'
+                backgroundColor: '#FEF6F4',
+                position: 'sticky',
+                top: 0,
+                zIndex: 10
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{
@@ -565,7 +578,8 @@ const HormurWidget = () => {
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 padding: '20px',
-                backgroundColor: '#FFFFFF'
+                backgroundColor: '#FFFFFF',
+                WebkitOverflowScrolling: 'touch'
               }}>
                 {messages.map((message, idx) => (
                   <div key={idx} style={{ marginBottom: '16px' }}>
@@ -750,47 +764,18 @@ const HormurWidget = () => {
                 flexShrink: 0,
                 padding: '16px',
                 borderTop: '1px solid #DFDFE9',
-                backgroundColor: '#FEF6F4'
+                backgroundColor: '#FEF6F4',
+                position: 'sticky',
+                bottom: 0
               }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    style={{ display: 'none' }}
-                    accept="image/*,.pdf,.doc,.docx"
-                  />
-                  
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isLoading || isRecording}
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      border: '2px solid #DFDFE9',
-                      backgroundColor: 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: (isLoading || isRecording) ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.2s',
-                      flexShrink: 0,
-                      opacity: (isLoading || isRecording) ? 0.5 : 1
-                    }}
-                    onMouseEnter={(e) => !isLoading && !isRecording && (e.currentTarget.style.borderColor = '#7E7EA5')}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#DFDFE9')}
-                  >
-                    <Paperclip size={18} color="#5E5E8F" />
-                  </button>
-
                   <button
                     onClick={isRecording ? stopRecording : startRecording}
                     disabled={isLoading}
                     className={isRecording ? 'recording-indicator' : ''}
                     style={{
-                      width: '40px',
-                      height: '40px',
+                      width: '44px',
+                      height: '44px',
                       borderRadius: '50%',
                       border: '2px solid #DFDFE9',
                       backgroundColor: isRecording ? '#EE6553' : 'white',
@@ -806,9 +791,9 @@ const HormurWidget = () => {
                     onMouseLeave={(e) => !isRecording && (e.currentTarget.style.borderColor = '#DFDFE9')}
                   >
                     {isRecording ? (
-                      <StopCircle size={18} color="white" />
+                      <StopCircle size={20} color="white" />
                     ) : (
-                      <Mic size={18} color="#5E5E8F" />
+                      <Mic size={20} color="#5E5E8F" />
                     )}
                   </button>
                   
@@ -821,10 +806,10 @@ const HormurWidget = () => {
                     disabled={isLoading || isRecording}
                     style={{
                       flex: 1,
-                      padding: '11px 16px',
+                      padding: '12px 16px',
                       borderRadius: '9999px',
                       border: '2px solid #DFDFE9',
-                      fontSize: '14px',
+                      fontSize: '16px',
                       outline: 'none',
                       transition: 'border-color 0.2s',
                       backgroundColor: (isLoading || isRecording) ? '#f9fafb' : 'white',
