@@ -34,34 +34,6 @@ const HormurWidget = () => {
     }
   }, [isOpen]);
 
-  const getEventTypeLabel = (type, subtype) => {
-    const labels = {
-      'spectacle': 'Spectacle',
-      'concert': 'Concert',
-      'exposition': 'Exposition',
-      'arts_numeriques': 'Arts numériques',
-      'atelier': 'Atelier artistique',
-      'evenement': 'Événement',
-      'artiste': 'Artiste',
-      'lieu': 'Lieu'
-    };
-    return labels[subtype || type] || 'Événement';
-  };
-
-  const getEventTypeColor = (type) => {
-    const colors = {
-      'spectacle': '#F18475',
-      'concert': '#EE7951',
-      'exposition': '#F5A398',
-      'arts_numeriques': '#EEB653',
-      'atelier': '#F1C575',
-      'evenement': '#EE6553',
-      'artiste': '#EE7951',
-      'lieu': '#F18475'
-    };
-    return colors[type] || '#EE6553';
-  };
-
   const handleProfileSelect = (profile) => {
     setUserProfile(profile);
     const profileMessages = {
@@ -206,8 +178,6 @@ const HormurWidget = () => {
 
   const ResultCard = ({ result }) => {
     const youtubeId = extractYouTubeId(result.video_url);
-    const eventType = result.subtype || result.type || 'evenement';
-    const hasMedia = youtubeId || result.image_url;
 
     return (
       <div style={{
@@ -411,6 +381,8 @@ const HormurWidget = () => {
     );
   };
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
   return (
     <>
       <style>{`
@@ -473,15 +445,11 @@ const HormurWidget = () => {
             border: 'none',
             cursor: 'pointer',
             transform: isOpen ? 'scale(0)' : 'scale(1)',
-            opacity: isOpen ? 0 : 1,
-            backgroundImage: isOpen ? 'none' : 'url(/icone-logo-hormur.svg)',
-            backgroundSize: '32px 32px',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat'
+            opacity: isOpen ? 0 : 1
           }}
           aria-label="Ouvrir l'assistant Hormur"
         >
-          {!isOpen && <MessageCircle color="white" size={28} />}
+          <MessageCircle color="white" size={28} />
         </button>
 
         {isOpen && (
@@ -502,13 +470,13 @@ const HormurWidget = () => {
               className="hormur-modal"
               style={{
                 position: 'fixed',
-                bottom: window.innerWidth <= 768 ? '0' : '20px',
-                right: window.innerWidth <= 768 ? '0' : '20px',
-                left: window.innerWidth <= 768 ? '0' : 'auto',
-                width: window.innerWidth <= 768 ? '100%' : 'min(420px, 90vw)',
-                height: window.innerWidth <= 768 ? '100dvh' : 'min(600px, 85vh)',
+                bottom: isMobile ? '0' : '20px',
+                right: isMobile ? '0' : '20px',
+                left: isMobile ? '0' : 'auto',
+                width: isMobile ? '100%' : 'min(420px, 90vw)',
+                height: isMobile ? '100vh' : 'min(600px, 85vh)',
                 backgroundColor: 'white',
-                borderRadius: window.innerWidth <= 768 ? '0' : '24px',
+                borderRadius: isMobile ? '0' : '24px',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                 display: 'flex',
                 flexDirection: 'column',
