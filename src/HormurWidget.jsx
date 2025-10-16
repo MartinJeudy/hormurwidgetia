@@ -302,7 +302,7 @@ const HormurWidget = () => {
           )}
           
           {result.url && (
-            
+            <a
               href={result.url}
               target="_blank"
               rel="noopener noreferrer"
@@ -331,7 +331,8 @@ const HormurWidget = () => {
                 e.currentTarget.style.opacity = '1';
                 e.currentTarget.style.transform = 'scale(1)';
               }}
-              onClick={(e) => e.stopPropagation()}>
+              onClick={(e) => e.stopPropagation()}
+            >
               Voir les details
             </a>
           )}
@@ -348,7 +349,7 @@ const HormurWidget = () => {
     return (
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {buttons.map((btn, idx) => (
-          
+          <a
             key={idx}
             href={btn.url}
             target="_blank"
@@ -373,7 +374,8 @@ const HormurWidget = () => {
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = 'transparent';
               e.currentTarget.style.color = '#EE6553';
-            }}>
+            }}
+          >
             {btn.label}
           </a>
         ))}
@@ -385,6 +387,7 @@ const HormurWidget = () => {
 
   return (
     <>
+      {/* Styles globaux */}
       <style>{`
         @keyframes pulse {
           0%, 100% { transform: scale(1); }
@@ -425,6 +428,7 @@ const HormurWidget = () => {
         .recording-indicator { animation: recordPulse 1s ease-in-out infinite; }
       `}</style>
 
+      {/* Le widget */}
       <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -454,6 +458,7 @@ const HormurWidget = () => {
 
         {isOpen && (
           <>
+            {/* Overlay */}
             <div 
               style={{
                 position: 'fixed',
@@ -466,6 +471,7 @@ const HormurWidget = () => {
               onClick={() => setIsOpen(false)}
             />
             
+            {/* Fenêtre principale */}
             <div 
               className="hormur-modal"
               style={{
@@ -484,6 +490,7 @@ const HormurWidget = () => {
                 zIndex: 9999
               }}
             >
+              {/* Header */}
               <div style={{
                 flexShrink: 0,
                 padding: '16px 20px',
@@ -541,6 +548,7 @@ const HormurWidget = () => {
                 </button>
               </div>
 
+              {/* Messages */}
               <div className="hormur-scrollbar" style={{
                 flex: 1,
                 overflowY: 'auto',
@@ -728,6 +736,7 @@ const HormurWidget = () => {
                 <div ref={messagesEndRef} />
               </div>
 
+              {/* Input */}
               <div style={{
                 flexShrink: 0,
                 padding: '16px',
