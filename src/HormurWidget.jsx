@@ -30,9 +30,16 @@ const HormurWidget = () => {
           content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un evenement, un artiste ou un lieu ?",
           showProfileButtons: true
         }]);
+        
+        if (isMobile) {
+          setTimeout(() => {
+            const scrollContainer = document.querySelector('.hormur-scrollbar');
+            if (scrollContainer) scrollContainer.scrollTop = 0;
+          }, 100);
+        }
       }, 300);
     }
-  }, [isOpen, messages.length]);
+  }, [isOpen, isMobile]);
 
   const handleProfileSelect = (profile) => {
     setUserProfile(profile);
@@ -493,7 +500,7 @@ const HormurWidget = () => {
               {/* Header */}
               <div style={{
                 flexShrink: 0,
-                padding: '16px 20px',
+                padding: isMobile ? '10px 16px' : '16px 20px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -503,10 +510,10 @@ const HormurWidget = () => {
                 top: 0,
                 zIndex: 10
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '12px' }}>
                   <div style={{
-                    width: '42px',
-                    height: '42px',
+                    width: isMobile ? '36px' : '42px',
+                    height: isMobile ? '36px' : '42px',
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
@@ -514,17 +521,17 @@ const HormurWidget = () => {
                     backgroundColor: '#EE6553',
                     flexShrink: 0
                   }}>
-                    <svg width="24" height="24" viewBox="0 0 100 100" fill="white">
+                    <svg width={isMobile ? '20' : '24'} height={isMobile ? '20' : '24'} viewBox="0 0 100 100" fill="white">
                       <path d="M20,20 L20,80 L35,80 L35,55 L50,65 L50,80 L65,80 L65,20 L50,20 L50,45 L35,35 L35,20 Z" />
                       <circle cx="80" cy="50" r="15" fill="white" />
                       <circle cx="80" cy="50" r="8" fill="#EE6553" />
                     </svg>
                   </div>
                   <div>
-                    <h3 style={{ fontFamily: 'Georgia, serif', fontWeight: 'bold', fontSize: '17px', color: '#323242', margin: 0 }}>
+                    <h3 style={{ fontFamily: 'Georgia, serif', fontWeight: 'bold', fontSize: isMobile ? '15px' : '17px', color: '#323242', margin: 0 }}>
                       Hormur
                     </h3>
-                    <p style={{ fontSize: '12px', opacity: 0.7, color: '#323242', margin: 0 }}>
+                    <p style={{ fontSize: isMobile ? '11px' : '12px', opacity: 0.7, color: '#323242', margin: 0 }}>
                       L'art ou on ne l'attend pas
                     </p>
                   </div>
@@ -532,7 +539,7 @@ const HormurWidget = () => {
                 <button
                   onClick={() => setIsOpen(false)}
                   style={{
-                    padding: '8px',
+                    padding: isMobile ? '6px' : '8px',
                     borderRadius: '50%',
                     border: 'none',
                     backgroundColor: 'transparent',
@@ -544,7 +551,7 @@ const HormurWidget = () => {
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   aria-label="Fermer"
                 >
-                  <X size={22} color="#323242" />
+                  <X size={isMobile ? 20 : 22} color="#323242" />
                 </button>
               </div>
 
@@ -553,7 +560,7 @@ const HormurWidget = () => {
                 flex: 1,
                 overflowY: 'auto',
                 overflowX: 'hidden',
-                padding: '20px',
+                padding: isMobile ? '16px' : '20px',
                 backgroundColor: '#FFFFFF',
                 WebkitOverflowScrolling: 'touch'
               }}>
