@@ -520,7 +520,6 @@ const HormurWidget = () => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: '#EE6553',
                     flexShrink: 0,
                     overflow: 'hidden'
                   }}>
@@ -535,6 +534,7 @@ const HormurWidget = () => {
                       }}
                       onError={(e) => {
                         e.target.style.display = 'none';
+                        e.target.parentElement.style.backgroundColor = '#EE6553';
                         e.target.parentElement.innerHTML = '<svg width="42" height="42" viewBox="0 0 100 100" fill="white"><path d="M20,20 L20,80 L35,80 L35,55 L50,65 L50,80 L65,80 L65,20 L50,20 L50,45 L35,35 L35,20 Z" /><circle cx="80" cy="50" r="15" fill="white" /><circle cx="80" cy="50" r="8" fill="#EE6553" /></svg>';
                       }}
                     />
