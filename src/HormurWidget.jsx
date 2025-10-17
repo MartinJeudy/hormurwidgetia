@@ -476,13 +476,22 @@ const HormurWidget = () => {
               className="hormur-modal"
               style={{
                 position: 'fixed',
-                bottom: isMobile ? '0' : '20px',
-                right: isMobile ? '0' : '20px',
-                left: isMobile ? '0' : 'auto',
-                width: isMobile ? '100%' : 'min(420px, 90vw)',
-                height: isMobile ? '100vh' : 'min(600px, 85vh)',
+                ...(isMobile ? {
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  left: 0,
+                  width: '100%',
+                  height: 'auto',
+                  borderRadius: '0'
+                } : {
+                  bottom: '20px',
+                  right: '20px',
+                  width: 'min(420px, 90vw)',
+                  height: 'min(600px, 85vh)',
+                  borderRadius: '24px'
+                }),
                 backgroundColor: 'white',
-                borderRadius: isMobile ? '0' : '24px',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -514,11 +523,19 @@ const HormurWidget = () => {
                     backgroundColor: '#EE6553',
                     flexShrink: 0
                   }}>
-                    <svg width="24" height="24" viewBox="0 0 100 100" fill="white">
-                      <path d="M20,20 L20,80 L35,80 L35,55 L50,65 L50,80 L65,80 L65,20 L50,20 L50,45 L35,35 L35,20 Z" />
-                      <circle cx="80" cy="50" r="15" fill="white" />
-                      <circle cx="80" cy="50" r="8" fill="#EE6553" />
-                    </svg>
+                    <img 
+                      src="/icone logo hormur.svg" 
+                      alt="Logo Hormur" 
+                      style={{ 
+                        width: '24px', 
+                        height: '24px',
+                        display: 'block'
+                      }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.parentElement.innerHTML = '<svg width="24" height="24" viewBox="0 0 100 100" fill="white"><path d="M20,20 L20,80 L35,80 L35,55 L50,65 L50,80 L65,80 L65,20 L50,20 L50,45 L35,35 L35,20 Z" /><circle cx="80" cy="50" r="15" fill="white" /><circle cx="80" cy="50" r="8" fill="#EE6553" /></svg>';
+                      }}
+                    />
                   </div>
                   <div>
                     <h3 style={{ fontFamily: 'Georgia, serif', fontWeight: 'bold', fontSize: '17px', color: '#323242', margin: 0 }}>
