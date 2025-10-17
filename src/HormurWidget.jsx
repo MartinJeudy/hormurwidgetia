@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Sparkles, Mic, StopCircle } from 'lucide-react';
 
@@ -10,45 +9,67 @@ const HormurWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [transcribedText, setTranscribedText] = useState('');
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 💾 SYSTÈME DE CACHE
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+  const getCacheKey = (message, profile) => {
+    const normalized = message.toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .sort()
+      .join('_');
+    return `hormur_cache_${profile}_${normalized}`;
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  useEffect(() => {
-    if (isOpen && messages.length === 0) {
-      setTimeout(() => {
-        setMessages([{
-          type: 'bot',
-          content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un evenement, un artiste ou un lieu ?",
-          showProfileButtons: true
-        }]);
-      }, 300);
+  const getCachedResponse = (message, profile) => {
+    try {
+      const cacheKey = getCacheKey(message, profile);
+      const cached = localStorage.getItem(cacheKey);
+      
+      if (!cached) return null;
+      
+      const { data, timestamp } = JSON.parse(cached);
+      const age = Date.now() - timestamp;
+      
+      if (age > CACHE_DURATION) {
+        localStorage.removeItem(cacheKey);
+        return null;
+      }
+      
+      console.log('✅ Cache hit:', message.substring(0, 50));
+      return data;
+    } catch (e) {
+      return null;
     }
-  }, [isOpen, messages.length]);
-
-  const handleProfileSelect = (profile) => {
-    setUserProfile(profile);
-    const profileMessages = {
-      spectateur: "Super ! Quelle ville vous interesse, et pour quand ?",
-      artiste: "Genial ! Quel type de lieu pour votre art ? (appartement, jardin, galerie...)",
-      hote: "Parfait ! Quel type d'artiste recherchez-vous ? (musique, theatre, arts visuels...)"
-    };
-    
-    setMessages(prev => [...prev, {
-      type: 'bot',
-      content: profileMessages[profile],
-      profile: profile
-    }]);
   };
+
+  const setCachedResponse = (message, profile, data) => {
+    try {
+      const cacheKey = getCacheKey(message, profile);
+      localStorage.setItem(cacheKey, JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+      
+      const allKeys = Object.keys(localStorage).filter(k => k.startsWith('hormur_cache_'));
+      if (allKeys.length > 50) {
+        allKeys.slice(0, allKeys.length - 50).forEach(k => localStorage.removeItem(k));
+      }
+    } catch (e) {
+      console.warn('Cache storage failed:', e);
+    }
+  };
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🎤 GESTION AUDIO
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   const startRecording = async () => {
     try {
@@ -66,17 +87,7 @@ const HormurWidget = () => {
         }
       };
       
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Audio = reader.result.split(',')[1];
-          setTranscribedText('[Audio enregistre - ' + Math.round(audioBlob.size / 1024) + 'KB]');
-          setInputValue('[Message vocal - en attente de transcription]');
-        };
-        reader.readAsDataURL(audioBlob);
-        
+      mediaRecorder.onstop = () => {
         stream.getTracks().forEach(track => track.stop());
       };
       
@@ -84,7 +95,7 @@ const HormurWidget = () => {
       setIsRecording(true);
     } catch (error) {
       console.error('Erreur microphone:', error);
-      alert('Impossible d\'acceder au microphone. Verifiez les permissions.');
+      alert('Impossible d\'accéder au microphone. Vérifiez les permissions.');
     }
   };
 
@@ -92,26 +103,74 @@ const HormurWidget = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      
+      // Attendre un peu que les chunks soient disponibles
+      setTimeout(() => {
+        if (audioChunksRef.current.length > 0) {
+          setInputValue('[Message vocal enregistré - prêt à envoyer]');
+        }
+      }, 100);
     }
   };
 
-  const handleSendMessage = async () => {
-    if ((!inputValue.trim() && !transcribedText) || isLoading) return;
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 📤 ENVOI DE MESSAGE
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    const userMessage = inputValue.trim() || transcribedText;
+  const handleSendMessage = async () => {
+    const hasAudioToSend = audioChunksRef.current.length > 0;
+    const hasTextToSend = inputValue.trim() && !inputValue.includes('[Message vocal');
+    
+    if ((!hasTextToSend && !hasAudioToSend) || isLoading) return;
+
+    const startTime = performance.now();
+    const userMessage = hasTextToSend ? inputValue.trim() : '🎤 Message vocal';
+    
     setInputValue('');
-    setTranscribedText('');
     
     setMessages(prev => [...prev, {
       type: 'user',
-      content: userMessage
+      content: userMessage,
+      isVocal: hasAudioToSend
     }]);
 
     setIsLoading(true);
 
     try {
+      // 🚀 VÉRIFIER LE CACHE (seulement pour texte)
+      if (hasTextToSend && !hasAudioToSend) {
+        const cached = getCachedResponse(userMessage, userProfile || 'spectateur');
+        if (cached) {
+          const cacheTime = performance.now() - startTime;
+          console.log(`⚡ Cache hit: ${cacheTime.toFixed(0)}ms`);
+          
+          setMessages(prev => [...prev, {
+            type: 'bot',
+            content: cached.message,
+            results: cached.results || [],
+            showCalendly: cached.showCalendly || false
+          }]);
+          
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 28000);
+
+      // 🎤 CONVERTIR L'AUDIO EN BASE64
+      let audioDataToSend = null;
+      if (hasAudioToSend) {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        audioDataToSend = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(audioBlob);
+        });
+        console.log('🎤 Audio encodé:', Math.round(audioBlob.size / 1024) + 'KB');
+      }
 
       const response = await fetch('/.netlify/functions/chat', {
         method: 'POST',
@@ -120,7 +179,8 @@ const HormurWidget = () => {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          message: userMessage,
+          message: hasTextToSend ? userMessage : '',
+          audioData: audioDataToSend,
           userProfile: userProfile || 'spectateur',
           sessionId: sessionId || null,
           timestamp: new Date().toISOString()
@@ -135,22 +195,46 @@ const HormurWidget = () => {
       }
 
       const data = await response.json();
+      const totalTime = performance.now() - startTime;
+      
+      console.log(`✅ Réponse reçue: ${totalTime.toFixed(0)}ms`);
+      
+      // 📝 MISE À JOUR DE LA TRANSCRIPTION SI AUDIO
+      if (data.transcribedText && hasAudioToSend) {
+        setMessages(prev => prev.map((msg, idx) => 
+          idx === prev.length - 1 ? { ...msg, content: data.transcribedText } : msg
+        ));
+      }
       
       if (data.sessionId && !sessionId) {
         setSessionId(data.sessionId);
       }
 
+      // 💾 METTRE EN CACHE (seulement si texte et résultats)
+      if (hasTextToSend && !hasAudioToSend && data.results && data.results.length > 0) {
+        setCachedResponse(userMessage, userProfile || 'spectateur', {
+          message: data.message,
+          results: data.results,
+          showCalendly: data.showCalendly
+        });
+      }
+
       setMessages(prev => [...prev, {
         type: 'bot',
-        content: data.message || "Desole, je n'ai pas de reponse.",
+        content: data.message || "Désolé, je n'ai pas de réponse.",
         results: Array.isArray(data.results) ? data.results : [],
         showCalendly: data.showCalendly === true
       }]);
 
+      // 🧹 NETTOYAGE
+      audioChunksRef.current = [];
+
     } catch (error) {
+      console.error('❌ Erreur:', error);
+      
       const errorMessage = error.name === 'AbortError' 
-        ? "La requete a pris trop de temps. Reessayez avec une question plus simple"
-        : "Probleme technique. Pouvez-vous reessayer ?";
+        ? "La requête a pris trop de temps. Réessayez avec une question plus simple"
+        : "Problème technique. Pouvez-vous réessayer ?";
       
       setMessages(prev => [...prev, {
         type: 'bot',
@@ -158,9 +242,50 @@ const HormurWidget = () => {
         results: [],
         showCalendly: true
       }]);
+      
+      audioChunksRef.current = [];
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🎯 AUTRES HANDLERS
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (isOpen && messages.length === 0) {
+      setTimeout(() => {
+        setMessages([{
+          type: 'bot',
+          content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un événement, un artiste ou un lieu ?",
+          showProfileButtons: true
+        }]);
+      }, 300);
+    }
+  }, [isOpen, messages.length]);
+
+  const handleProfileSelect = (profile) => {
+    setUserProfile(profile);
+    const profileMessages = {
+      spectateur: "Super ! Quelle ville vous intéresse, et pour quand ?",
+      artiste: "Génial ! Quel type de lieu pour votre art ? (appartement, jardin, galerie...)",
+      hote: "Parfait ! Quel type d'artiste recherchez-vous ? (musique, théâtre, arts visuels...)"
+    };
+    
+    setMessages(prev => [...prev, {
+      type: 'bot',
+      content: profileMessages[profile],
+      profile: profile
+    }]);
   };
 
   const handleKeyPress = (e) => {
@@ -176,6 +301,10 @@ const HormurWidget = () => {
     const match = url.match(regExp);
     return (match && match[7].length === 11) ? match[7] : null;
   };
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🎨 COMPOSANTS
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   const ResultCard = ({ result }) => {
     const youtubeId = extractYouTubeId(result.video_url);
@@ -221,7 +350,7 @@ const HormurWidget = () => {
                 border: 'none'
               }}
               src={'https://www.youtube.com/embed/' + youtubeId}
-              title="Video de presentation"
+              title="Vidéo de présentation"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
@@ -334,7 +463,7 @@ const HormurWidget = () => {
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              Voir les details
+              Voir les détails
             </a>
           )}
         </div>
@@ -344,8 +473,8 @@ const HormurWidget = () => {
 
   const CalendlyButtons = ({ profile }) => {
     const buttons = profile === 'artiste' 
-      ? [{ label: 'Discuter avec Eleonore', url: 'https://calendly.com/eleonore-hormur/15min' }] 
-      : [{ label: 'Echanger avec Martin', url: 'https://calendly.com/martin-jeudy/15min' }];
+      ? [{ label: 'Discuter avec Éléonore', url: 'https://calendly.com/eleonore-hormur/15min' }] 
+      : [{ label: 'Échanger avec Martin', url: 'https://calendly.com/martin-jeudy/15min' }];
 
     return (
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -386,9 +515,12 @@ const HormurWidget = () => {
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🎨 RENDER
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
   return (
     <>
-      {/* Styles globaux */}
       <style>{`
         @keyframes pulse {
           0%, 100% { transform: scale(1); }
@@ -429,7 +561,6 @@ const HormurWidget = () => {
         .recording-indicator { animation: recordPulse 1s ease-in-out infinite; }
       `}</style>
 
-      {/* Le widget */}
       <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -459,7 +590,6 @@ const HormurWidget = () => {
 
         {isOpen && (
           <>
-            {/* Overlay */}
             <div 
               style={{
                 position: 'fixed',
@@ -472,7 +602,6 @@ const HormurWidget = () => {
               onClick={() => setIsOpen(false)}
             />
             
-            {/* Fenêtre principale */}
             <div 
               className="hormur-modal"
               style={{
@@ -545,7 +674,7 @@ const HormurWidget = () => {
                       Hormur
                     </h3>
                     <p style={{ fontSize: '12px', opacity: 0.7, color: '#323242', margin: 0 }}>
-                      L'art ou on ne l'attend pas
+                      L'art où on ne l'attend pas
                     </p>
                   </div>
                 </div>
@@ -637,7 +766,7 @@ const HormurWidget = () => {
                                 }}
                               >
                                 <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎟️</div>
-                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Evenements</div>
+                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Événements</div>
                               </button>
                               <button
                                 onClick={() => handleProfileSelect('artiste')}
@@ -796,29 +925,30 @@ const HormurWidget = () => {
                   
                   <input
                     type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
+                    value={isRecording ? '🎤 Enregistrement en cours...' : inputValue}
+                    onChange={(e) => !isRecording && setInputValue(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Ecrivez votre message..."
+                    placeholder={isRecording ? 'Parlez maintenant...' : 'Écrivez votre message...'}
                     disabled={isLoading || isRecording}
                     style={{
                       flex: 1,
                       padding: '12px 16px',
                       borderRadius: '9999px',
-                      border: '2px solid #DFDFE9',
+                      border: isRecording ? '2px solid #EE6553' : '2px solid #DFDFE9',
                       fontSize: '16px',
                       outline: 'none',
                       transition: 'border-color 0.2s',
-                      backgroundColor: (isLoading || isRecording) ? '#f9fafb' : 'white',
-                      minWidth: 0
+                      backgroundColor: (isLoading || isRecording) ? '#FEF6F4' : 'white',
+                      minWidth: 0,
+                      color: isRecording ? '#EE6553' : '#323242'
                     }}
                     onFocus={(e) => !isRecording && (e.target.style.borderColor = '#7E7EA5')}
-                    onBlur={(e) => (e.target.style.borderColor = '#DFDFE9')}
+                    onBlur={(e) => !isRecording && (e.target.style.borderColor = '#DFDFE9')}
                   />
                   
                   <button
                     onClick={handleSendMessage}
-                    disabled={!inputValue.trim() || isLoading || isRecording}
+                    disabled={(!inputValue.trim() || inputValue.includes('[Message vocal enregistré')) && audioChunksRef.current.length === 0 || isLoading || isRecording}
                     style={{
                       width: '48px',
                       height: '48px',
@@ -829,13 +959,13 @@ const HormurWidget = () => {
                       color: 'white',
                       transition: 'all 0.3s',
                       border: 'none',
-                      cursor: (inputValue.trim() && !isLoading && !isRecording) ? 'pointer' : 'not-allowed',
-                      background: (inputValue.trim() && !isLoading && !isRecording) ? 'linear-gradient(to right, #ef4444, #f97316)' : '#DFDFE9',
-                      opacity: (inputValue.trim() && !isLoading && !isRecording) ? 1 : 0.6,
+                      cursor: ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 'pointer' : 'not-allowed',
+                      background: ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 'linear-gradient(to right, #ef4444, #f97316)' : '#DFDFE9',
+                      opacity: ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 1 : 0.6,
                       flexShrink: 0
                     }}
-                    onMouseEnter={(e) => (inputValue.trim() && !isLoading && !isRecording) && (e.currentTarget.style.opacity = '0.9')}
-                    onMouseLeave={(e) => (e.currentTarget.style.opacity = (inputValue.trim() && !isLoading && !isRecording) ? '1' : '0.6')}
+                    onMouseEnter={(e) => ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording && (e.currentTarget.style.opacity = '0.9')}
+                    onMouseLeave={(e) => (e.currentTarget.style.opacity = ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? '1' : '0.6')}
                   >
                     <Send size={20} />
                   </button>
@@ -847,7 +977,7 @@ const HormurWidget = () => {
                   opacity: 0.6,
                   color: '#323242'
                 }}>
-                  Hormur - L'art ou on ne l'attend pas
+                  Hormur - L'art où on ne l'attend pas
                 </p>
               </div>
             </div>
