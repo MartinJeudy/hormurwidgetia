@@ -1,6 +1,8 @@
 const fetch = require('node-fetch');
+const FormData = require('form-data');
 
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 exports.handler = async (event) => {
   const corsHeaders = {
@@ -10,17 +12,19 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json'
   };
 
+  // Répondre aux requêtes OPTIONS (CORS preflight)
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: corsHeaders, body: '' };
   }
 
+  // Vérifier que N8N_WEBHOOK_URL existe
   if (!N8N_WEBHOOK_URL) {
-    console.error('❌ N8N_WEBHOOK_URL manquant');
+    console.error('❌ N8N_WEBHOOK_URL manquant dans les variables d\'environnement');
     return {
       statusCode: 500,
       headers: corsHeaders,
       body: JSON.stringify({
-        message: "Configuration manquante. Vérifiez N8N_WEBHOOK_URL dans Netlify.",
+        message: "Erreur de configuration. Contactez l'administrateur.",
         results: [],
         showCalendly: true
       })
@@ -28,68 +32,178 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { message, userProfile, sessionId, audioData } = JSON.parse(event.body || '{}');
+    const requestBody = JSON.parse(event.body || '{}');
+    const { message, userProfile, sessionId, audioData } = requestBody;
     
-    if (!message?.trim() && !audioData) {
+    let finalMessage = message?.trim() || '';
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 🎤 TRANSCRIPTION AUDIO AVEC WHISPER
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    
+    if (audioData) {
+      console.log('🎙️ Audio reçu, transcription en cours...');
+      
+      // Vérifier que la clé OpenAI existe
+      if (!OPENAI_API_KEY) {
+        console.warn('⚠️ OPENAI_API_KEY manquant - transcription impossible');
+        return {
+          statusCode: 400,
+          headers: corsHeaders,
+          body: JSON.stringify({
+            message: "La transcription vocale n'est pas encore configurée. Veuillez écrire votre message.",
+            results: [],
+            showCalendly: false
+          })
+        };
+      }
+      
+      try {
+        // Décoder le base64 en Buffer
+        const audioBuffer = Buffer.from(audioData, 'base64');
+        console.log(`📦 Taille audio: ${Math.round(audioBuffer.length / 1024)}KB`);
+        
+        // Préparer le FormData pour l'API Whisper
+        const formData = new FormData();
+        formData.append('file', audioBuffer, {
+          filename: 'audio.webm',
+          contentType: 'audio/webm'
+        });
+        formData.append('model', 'whisper-1');
+        formData.append('language', 'fr'); // Force français
+        formData.append('response_format', 'json');
+
+        // Appel à l'API Whisper d'OpenAI
+        console.log('🌐 Envoi vers Whisper API...');
+        const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            ...formData.getHeaders()
+          },
+          body: formData
+        });
+
+        if (!whisperResponse.ok) {
+          const errorBody = await whisperResponse.text();
+          console.error('❌ Erreur Whisper:', whisperResponse.status, errorBody);
+          throw new Error(`Whisper API error: ${whisperResponse.status}`);
+        }
+
+        const transcription = await whisperResponse.json();
+        finalMessage = transcription.text?.trim() || '';
+        
+        if (!finalMessage) {
+          throw new Error('Transcription vide');
+        }
+        
+        console.log('✅ Transcription réussie:', finalMessage.substring(0, 100));
+
+      } catch (transcriptionError) {
+        console.error('❌ Erreur transcription:', transcriptionError.message);
+        return {
+          statusCode: 400,
+          headers: corsHeaders,
+          body: JSON.stringify({
+            message: "Impossible de transcrire l'audio. Parlez plus fort ou réessayez.",
+            results: [],
+            showCalendly: false
+          })
+        };
+      }
+    }
+
+    // Vérifier qu'on a bien un message
+    if (!finalMessage) {
       return {
         statusCode: 400,
         headers: corsHeaders,
         body: JSON.stringify({
-          message: "Merci d'écrire un message 😊",
+          message: "Merci d'envoyer un message ou un audio 😊",
           results: [],
           showCalendly: false
         })
       };
     }
 
-    console.log('📤 Envoi vers n8n:', { 
-      message: message?.substring(0, 50), 
-      userProfile, 
-      sessionId,
-      hasAudio: !!audioData 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 📤 ENVOI VERS N8N
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    console.log('📤 Envoi vers n8n:', {
+      message: finalMessage.substring(0, 50),
+      userProfile: userProfile || 'spectateur',
+      sessionId: sessionId || 'nouveau'
     });
 
-    const response = await fetch(N8N_WEBHOOK_URL, {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000); // 25s max
+
+    const n8nResponse = await fetch(N8N_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: message?.trim() || '',
-        audioData: audioData || null,
-        userProfile: userProfile || null,
+        message: finalMessage,
+        userProfile: userProfile || 'spectateur',
         sessionId: sessionId || null,
         timestamp: new Date().toISOString()
-      })
+      }),
+      signal: controller.signal
     });
 
-    if (!response.ok) {
-      throw new Error(`n8n error: ${response.status} ${response.statusText}`);
+    clearTimeout(timeout);
+
+    if (!n8nResponse.ok) {
+      const errorText = await n8nResponse.text();
+      console.error('❌ Erreur n8n:', n8nResponse.status, errorText);
+      throw new Error(`n8n error: ${n8nResponse.status}`);
     }
 
-    const data = await response.json();
-    console.log('✅ Réponse de n8n reçue');
+    const n8nData = await n8nResponse.json();
+    console.log('✅ Réponse n8n reçue avec succès');
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 📦 RÉPONSE FINALE
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     return {
       statusCode: 200,
       headers: corsHeaders,
       body: JSON.stringify({
-        sessionId: data.sessionId || sessionId,
-        message: data.message || "Réponse reçue",
-        results: Array.isArray(data.results) ? data.results : [],
-        showCalendly: data.showCalendly || false
+        sessionId: n8nData.sessionId || sessionId,
+        message: n8nData.message || "Réponse reçue",
+        transcribedText: audioData ? finalMessage : undefined, // Renvoyer la transcription
+        results: Array.isArray(n8nData.results) ? n8nData.results : [],
+        showCalendly: n8nData.showCalendly || false
       })
     };
 
   } catch (error) {
-    console.error('❌ Erreur:', error.message);
+    console.error('❌ Erreur globale:', error.message);
+    
+    // Message d'erreur selon le type
+    let errorMessage = "Problème technique. Réessayez dans un instant 🙏";
+    let statusCode = 500;
+    
+    if (error.name === 'AbortError') {
+      errorMessage = "La requête a pris trop de temps. Réessayez avec une question plus courte.";
+      statusCode = 504;
+    } else if (error.message.includes('Whisper')) {
+      errorMessage = "Erreur de transcription audio. Réessayez ou écrivez votre message.";
+      statusCode = 400;
+    } else if (error.message.includes('n8n')) {
+      errorMessage = "Le service n8n ne répond pas. Contactez l'administrateur.";
+      statusCode = 502;
+    }
     
     return {
-      statusCode: 500,
+      statusCode: statusCode,
       headers: corsHeaders,
       body: JSON.stringify({
-        message: "Problème technique. Réessayez dans un instant 🙏",
+        message: errorMessage,
         results: [],
         showCalendly: true,
-        error: error.message
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       })
     };
   }
