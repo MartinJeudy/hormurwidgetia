@@ -103,15 +103,11 @@ const HormurWidget = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      
-      // Attendre un peu que les chunks soient disponibles
-      setTimeout(() => {
-        if (audioChunksRef.current.length > 0) {
-          setInputValue('[Message vocal enregistré - prêt à envoyer]');
-        }
-      }, 100);
     }
   };
+
+  // État pour savoir si un audio est prêt
+  const hasRecordedAudio = audioChunksRef.current.length > 0;
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // 📤 ENVOI DE MESSAGE
@@ -119,7 +115,7 @@ const HormurWidget = () => {
 
   const handleSendMessage = async () => {
     const hasAudioToSend = audioChunksRef.current.length > 0;
-    const hasTextToSend = inputValue.trim() && !inputValue.includes('[Message vocal');
+    const hasTextToSend = inputValue.trim().length > 0;
     
     if ((!hasTextToSend && !hasAudioToSend) || isLoading) return;
 
@@ -179,7 +175,7 @@ const HormurWidget = () => {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          message: hasTextToSend ? userMessage : '',
+          message: hasTextToSend ? userMessage : '', // Vide si audio
           audioData: audioDataToSend,
           userProfile: userProfile || 'spectateur',
           sessionId: sessionId || null,
@@ -925,30 +921,30 @@ const HormurWidget = () => {
                   
                   <input
                     type="text"
-                    value={isRecording ? '🎤 Enregistrement en cours...' : inputValue}
+                    value={isRecording ? '🎤 Enregistrement en cours...' : (audioChunksRef.current.length > 0 && !inputValue ? '🎤 Audio prêt - Cliquez sur Envoyer' : inputValue)}
                     onChange={(e) => !isRecording && setInputValue(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder={isRecording ? 'Parlez maintenant...' : 'Écrivez votre message...'}
+                    placeholder={isRecording ? 'Parlez maintenant...' : (audioChunksRef.current.length > 0 ? 'Audio enregistré - Envoyez ou écrivez' : 'Écrivez votre message...')}
                     disabled={isLoading || isRecording}
                     style={{
                       flex: 1,
                       padding: '12px 16px',
                       borderRadius: '9999px',
-                      border: isRecording ? '2px solid #EE6553' : '2px solid #DFDFE9',
+                      border: isRecording ? '2px solid #EE6553' : (audioChunksRef.current.length > 0 ? '2px solid #10b981' : '2px solid #DFDFE9'),
                       fontSize: '16px',
                       outline: 'none',
                       transition: 'border-color 0.2s',
                       backgroundColor: (isLoading || isRecording) ? '#FEF6F4' : 'white',
                       minWidth: 0,
-                      color: isRecording ? '#EE6553' : '#323242'
+                      color: isRecording ? '#EE6553' : (audioChunksRef.current.length > 0 && !inputValue ? '#10b981' : '#323242')
                     }}
-                    onFocus={(e) => !isRecording && (e.target.style.borderColor = '#7E7EA5')}
-                    onBlur={(e) => !isRecording && (e.target.style.borderColor = '#DFDFE9')}
+                    onFocus={(e) => !isRecording && !audioChunksRef.current.length && (e.target.style.borderColor = '#7E7EA5')}
+                    onBlur={(e) => !isRecording && !audioChunksRef.current.length && (e.target.style.borderColor = '#DFDFE9')}
                   />
                   
                   <button
                     onClick={handleSendMessage}
-                    disabled={(!inputValue.trim() || inputValue.includes('[Message vocal enregistré')) && audioChunksRef.current.length === 0 || isLoading || isRecording}
+                    disabled={(inputValue.trim().length === 0 && audioChunksRef.current.length === 0) || isLoading || isRecording}
                     style={{
                       width: '48px',
                       height: '48px',
@@ -959,13 +955,13 @@ const HormurWidget = () => {
                       color: 'white',
                       transition: 'all 0.3s',
                       border: 'none',
-                      cursor: ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 'pointer' : 'not-allowed',
-                      background: ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 'linear-gradient(to right, #ef4444, #f97316)' : '#DFDFE9',
-                      opacity: ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 1 : 0.6,
+                      cursor: (inputValue.trim().length > 0 || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 'pointer' : 'not-allowed',
+                      background: (inputValue.trim().length > 0 || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 'linear-gradient(to right, #ef4444, #f97316)' : '#DFDFE9',
+                      opacity: (inputValue.trim().length > 0 || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? 1 : 0.6,
                       flexShrink: 0
                     }}
-                    onMouseEnter={(e) => ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording && (e.currentTarget.style.opacity = '0.9')}
-                    onMouseLeave={(e) => (e.currentTarget.style.opacity = ((inputValue.trim() && !inputValue.includes('[Message vocal')) || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? '1' : '0.6')}
+                    onMouseEnter={(e) => (inputValue.trim().length > 0 || audioChunksRef.current.length > 0) && !isLoading && !isRecording && (e.currentTarget.style.opacity = '0.9')}
+                    onMouseLeave={(e) => (e.currentTarget.style.opacity = (inputValue.trim().length > 0 || audioChunksRef.current.length > 0) && !isLoading && !isRecording ? '1' : '0.6')}
                   >
                     <Send size={20} />
                   </button>
