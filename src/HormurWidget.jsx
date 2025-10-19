@@ -136,71 +136,96 @@ const HormurWidget = () => {
   // Fonction pour arrêter et transcrire dans l'input seulement
   const stopRecordingOnly = () => {
     if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setAudioLevel(0);
-      
-      setTimeout(async () => {
-        // Vérifier s'il y a vraiment du son enregistré
-        if (audioChunksRef.current.length === 0) {
-          console.log('⚠️ Aucun audio enregistré');
-          return;
-        }
-
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      // Créer une Promise pour attendre que le MediaRecorder soit vraiment arrêté
+      return new Promise((resolve) => {
+        const recorder = mediaRecorderRef.current;
         
-        // Vérifier la taille du blob (minimum 1KB pour être considéré comme valide)
-        if (audioBlob.size < 1000) {
-          console.log('⚠️ Audio trop court ou vide');
-          audioChunksRef.current = [];
-          return;
-        }
+        recorder.onstop = async () => {
+          // Fermer les ressources audio
+          const stream = recorder.stream;
+          stream.getTracks().forEach(track => track.stop());
+          if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+          }
+          if (audioContextRef.current) {
+            audioContextRef.current.close();
+          }
+          
+          setIsRecording(false);
+          setAudioLevel(0);
+          
+          // Attendre un petit délai pour s'assurer que tous les chunks sont arrivés
+          await new Promise(wait => setTimeout(wait, 200));
+          
+          // Vérifier s'il y a vraiment du son enregistré
+          if (audioChunksRef.current.length === 0) {
+            console.log('⚠️ Aucun audio enregistré');
+            resolve();
+            return;
+          }
 
-        console.log('📦 Taille blob audio:', Math.round(audioBlob.size / 1024) + 'KB');
-        
-        try {
-          const reader = new FileReader();
-          reader.onloadend = async () => {
-            setIsTranscribing(true);
-            setInputValue('🎤 Transcription...');
-            
-            try {
-              const response = await fetch('/.netlify/functions/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  message: '',
-                  audioData: reader.result.split(',')[1],
-                  userProfile: userProfile || 'spectateur',
-                  sessionId: sessionId,
-                  timestamp: new Date().toISOString()
-                })
-              });
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          
+          // Vérifier la taille du blob (minimum 1KB)
+          if (audioBlob.size < 1000) {
+            console.log('⚠️ Audio trop court:', audioBlob.size, 'bytes');
+            audioChunksRef.current = [];
+            resolve();
+            return;
+          }
+
+          console.log('📦 Taille blob audio:', Math.round(audioBlob.size / 1024) + 'KB');
+          
+          try {
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+              setIsTranscribing(true);
+              setInputValue('🎤 Transcription...');
               
-              const data = await response.json();
-              setIsTranscribing(false);
-              
-              if (data.transcribedText) {
-                setInputValue(data.transcribedText);
-              } else {
+              try {
+                const response = await fetch('/.netlify/functions/chat', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    message: '',
+                    audioData: reader.result.split(',')[1],
+                    userProfile: userProfile || 'spectateur',
+                    sessionId: sessionId,
+                    timestamp: new Date().toISOString()
+                  })
+                });
+                
+                const data = await response.json();
+                setIsTranscribing(false);
+                
+                if (data.transcribedText && data.transcribedText.trim()) {
+                  setInputValue(data.transcribedText);
+                } else {
+                  setInputValue('');
+                  console.log('⚠️ Pas de transcription reçue ou vide');
+                }
+              } catch (error) {
+                console.error('Erreur transcription:', error);
+                setIsTranscribing(false);
                 setInputValue('');
-                console.log('⚠️ Pas de transcription reçue');
               }
-            } catch (error) {
-              console.error('Erreur transcription:', error);
-              setIsTranscribing(false);
-              setInputValue('');
-            }
-          };
-          reader.readAsDataURL(audioBlob);
-        } catch (error) {
-          console.error('Erreur lecture audio:', error);
-          setIsTranscribing(false);
-          setInputValue('');
-        }
+              
+              audioChunksRef.current = [];
+              resolve();
+            };
+            reader.readAsDataURL(audioBlob);
+          } catch (error) {
+            console.error('Erreur lecture audio:', error);
+            setIsTranscribing(false);
+            setInputValue('');
+            audioChunksRef.current = [];
+            resolve();
+          }
+        };
         
-        audioChunksRef.current = [];
-      }, 100);
+        // Déclencher l'arrêt
+        recorder.stop();
+      });
     }
   };
 
