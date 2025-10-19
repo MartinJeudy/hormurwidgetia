@@ -9,6 +9,7 @@ const HormurWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [hasAudioReady, setHasAudioReady] = useState(false); // NOUVEAU: pour forcer le re-render
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
