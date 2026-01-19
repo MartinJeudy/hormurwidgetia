@@ -768,8 +768,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
           className="hormur-floating-btn"
           style={{
             position: 'fixed',
-            bottom: `${bottomOffset}px`,
-            right: '20px',
+            bottom: isEmbed ? '8px' : `${bottomOffset}px`,
+            right: isEmbed ? '8px' : '20px',
             width: '64px',
             height: '64px',
             borderRadius: '50%',
@@ -791,17 +791,20 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
         {isOpen && (
           <>
-            <div 
-              style={{
-                position: 'fixed',
-                inset: 0,
-                backgroundColor: 'rgba(0,0,0,0.3)',
-                backdropFilter: 'blur(4px)',
-                transition: 'opacity 0.3s',
-                zIndex: 9998
-              }}
-              onClick={() => setIsOpen(false)}
-            />
+            {/* Backdrop : masqué en mode embed car l'iframe a une taille limitée */}
+            {!isEmbed && (
+              <div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  backdropFilter: 'blur(4px)',
+                  transition: 'opacity 0.3s',
+                  zIndex: 9998
+                }}
+                onClick={() => setIsOpen(false)}
+              />
+            )}
             
             <div 
               className="hormur-modal"
@@ -816,11 +819,11 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                   height: 'auto',
                   borderRadius: '0'
                 } : {
-                  bottom: `${bottomOffset}px`,
-                  right: '20px',
-                  width: 'min(420px, 90vw)',
-                  height: 'min(600px, 85vh)',
-                  borderRadius: '24px'
+                  bottom: isEmbed ? '0' : `${bottomOffset}px`,
+                  right: isEmbed ? '0' : '20px',
+                  width: isEmbed ? '100%' : 'min(420px, 90vw)',
+                  height: isEmbed ? '100%' : 'min(600px, 85vh)',
+                  borderRadius: isEmbed ? '24px' : '24px'
                 }),
                 backgroundColor: 'white',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
