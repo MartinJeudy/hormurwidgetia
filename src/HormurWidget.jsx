@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Sparkles, Mic, Square } from 'lucide-react';
 
-const HormurWidget = () => {
+const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -464,6 +464,16 @@ const HormurWidget = () => {
     }
   }, [isOpen, messages.length]);
 
+  // Notifier le parent (iframe) de l'état ouvert/fermé
+  useEffect(() => {
+    if (isEmbed && window.parent !== window) {
+      window.parent.postMessage({
+        type: 'HORMUR_WIDGET_STATE',
+        isOpen: isOpen
+      }, '*');
+    }
+  }, [isOpen, isEmbed]);
+
   const handleProfileSelect = (profile) => {
     setUserProfile(profile);
     const profileMessages = {
@@ -758,7 +768,7 @@ const HormurWidget = () => {
           className="hormur-floating-btn"
           style={{
             position: 'fixed',
-            bottom: '20px',
+            bottom: `${bottomOffset}px`,
             right: '20px',
             width: '64px',
             height: '64px',
@@ -806,7 +816,7 @@ const HormurWidget = () => {
                   height: 'auto',
                   borderRadius: '0'
                 } : {
-                  bottom: '20px',
+                  bottom: `${bottomOffset}px`,
                   right: '20px',
                   width: 'min(420px, 90vw)',
                   height: 'min(600px, 85vh)',
