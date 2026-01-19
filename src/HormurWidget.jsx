@@ -777,7 +777,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         .audio-bar { animation: wave 0.5s ease-in-out infinite; }
       `}</style>
 
-      <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif', background: 'transparent', backgroundColor: 'transparent' }}>
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="hormur-floating-btn"

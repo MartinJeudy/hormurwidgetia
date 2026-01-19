@@ -27,6 +27,7 @@ function EmbedApp() {
   return (
     <div style={{
       background: 'transparent',
+      backgroundColor: 'transparent',
       width: '100%',
       height: '100%',
       position: 'fixed',
@@ -34,7 +35,7 @@ function EmbedApp() {
       left: 0,
       pointerEvents: 'none'
     }}>
-      <div style={{ pointerEvents: 'auto' }}>
+      <div style={{ pointerEvents: 'auto', background: 'transparent', backgroundColor: 'transparent' }}>
         <HormurWidget isEmbed={true} bottomOffset={bottomOffset} />
       </div>
     </div>
