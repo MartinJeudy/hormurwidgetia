@@ -724,22 +724,26 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
     <>
       <style>{`
         @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
+          0%, 100% {
+            transform: scale3d(1, 1, 1);
+          }
+          50% {
+            transform: scale3d(1.05, 1.05, 1);
+          }
         }
         @keyframes slideUp {
           from {
             opacity: 0;
-            transform: translateY(20px) scale(0.95);
+            transform: translate3d(0, 20px, 0) scale3d(0.95, 0.95, 1);
           }
           to {
             opacity: 1;
-            transform: translateY(0) scale(1);
+            transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
           }
         }
         @keyframes bounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
+          0%, 100% { transform: translate3d(0, 0, 0); }
+          50% { transform: translate3d(0, -5px, 0); }
         }
         @keyframes wave {
           0%, 100% { transform: scaleY(0.5); }
@@ -757,8 +761,19 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         .hormur-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #EE7951;
         }
-        .hormur-floating-btn { animation: pulse 2s ease-in-out infinite; }
-        .hormur-modal { animation: slideUp 0.3s ease-out; }
+        .hormur-floating-btn {
+          animation: pulse 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+          will-change: transform;
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+          -moz-backface-visibility: hidden;
+          transform-style: preserve-3d;
+          -webkit-transform-style: preserve-3d;
+        }
+        .hormur-modal {
+          animation: slideUp 0.3s ease-out;
+          will-change: transform, opacity;
+        }
         .audio-bar { animation: wave 0.5s ease-in-out infinite; }
       `}</style>
 
