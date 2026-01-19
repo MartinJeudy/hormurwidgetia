@@ -14,14 +14,21 @@
       html, body, #root {
         width: 100%;
         height: 100%;
-        background: transparent !important;
-        background-color: transparent !important;
         overflow: hidden;
       }
-      /* Force transparency on all elements */
+      html {
+        background: rgba(0,0,0,0) !important;
+        background-color: rgba(0,0,0,0) !important;
+      }
       body {
+        background: rgba(0,0,0,0) !important;
+        background-color: rgba(0,0,0,0) !important;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+      }
+      #root {
+        background: rgba(0,0,0,0) !important;
+        background-color: rgba(0,0,0,0) !important;
       }
     </style>
   </head>

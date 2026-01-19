@@ -783,8 +783,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
           className="hormur-floating-btn"
           style={{
             position: 'fixed',
-            bottom: isEmbed ? '0' : `${bottomOffset}px`,
-            right: isEmbed ? '0' : '20px',
+            bottom: isEmbed ? '15px' : `${bottomOffset}px`,
+            right: isEmbed ? '15px' : '20px',
             width: '64px',
             height: '64px',
             borderRadius: '50%',
