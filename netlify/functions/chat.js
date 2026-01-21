@@ -132,7 +132,7 @@ exports.handler = async (event) => {
 
     console.log('📤 Envoi vers n8n:', {
       message: finalMessage.substring(0, 50),
-      userProfile: userProfile || 'spectateur',
+      userProfile: userProfile || 'indefini',
       sessionId: sessionId || 'nouveau'
     });
 
@@ -144,7 +144,7 @@ exports.handler = async (event) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: finalMessage,
-        userProfile: userProfile || 'spectateur',
+        userProfile: userProfile || 'indefini',
         sessionId: sessionId || null,
         timestamp: new Date().toISOString()
       }),

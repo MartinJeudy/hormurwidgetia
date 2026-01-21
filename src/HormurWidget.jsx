@@ -189,7 +189,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                   body: JSON.stringify({
                     message: '',
                     audioData: reader.result.split(',')[1],
-                    userProfile: userProfile || 'spectateur',
+                    userProfile: userProfile || 'indefini',
                     sessionId: sessionId,
                     timestamp: new Date().toISOString()
                   })
@@ -270,7 +270,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
             body: JSON.stringify({
               message: '',
               audioData: audioData,
-              userProfile: userProfile || 'spectateur',
+              userProfile: userProfile || 'indefini',
               sessionId: sessionId || null,
               timestamp: new Date().toISOString()
             })
@@ -354,7 +354,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
     try {
       // 🚀 VÉRIFIER LE CACHE
-      const cached = getCachedResponse(userMessage, userProfile || 'spectateur');
+      const cached = getCachedResponse(userMessage, userProfile || 'indefini');
       if (cached) {
         const cacheTime = performance.now() - startTime;
         console.log(`⚡ Cache hit: ${cacheTime.toFixed(0)}ms`);
@@ -384,7 +384,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         body: JSON.stringify({
           message: userMessage,
           audioData: null,
-          userProfile: userProfile || 'spectateur',
+          userProfile: userProfile || 'indefini',
           sessionId: sessionId || null,
           timestamp: new Date().toISOString()
         }),
@@ -408,7 +408,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
       // 💾 METTRE EN CACHE
       if (data.results && data.results.length > 0) {
-        setCachedResponse(userMessage, userProfile || 'spectateur', {
+        setCachedResponse(userMessage, userProfile || 'indefini', {
           message: data.message,
           results: data.results,
           showCalendly: data.showCalendly
