@@ -988,7 +988,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                                 <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Événements</div>
                               </button>
                               <button
-                                onClick={() => handleProfileSelect('artiste')}
+                                onClick={() => handleProfileSelect('hote')}
                                 style={{
                                   backgroundColor: 'white',
                                   border: '2px solid #F5AF97',
@@ -1011,7 +1011,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                                 <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Artistes</div>
                               </button>
                               <button
-                                onClick={() => handleProfileSelect('hote')}
+                                onClick={() => handleProfileSelect('artiste')}
                                 style={{
                                   backgroundColor: 'white',
                                   border: '2px solid #F5A398',
