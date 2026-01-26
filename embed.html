@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://hormur.com/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Hormur Widget Embed</title>
     <style>
       * {
@@ -19,12 +19,18 @@
       html {
         background: rgba(0,0,0,0) !important;
         background-color: rgba(0,0,0,0) !important;
+        /* Support pour les appareils avec encoche iOS */
+        height: 100dvh;
+        height: -webkit-fill-available;
       }
       body {
         background: rgba(0,0,0,0) !important;
         background-color: rgba(0,0,0,0) !important;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        /* Support pour Safari iOS avec barre de navigation */
+        min-height: 100dvh;
+        min-height: -webkit-fill-available;
       }
       #root {
         background: rgba(0,0,0,0) !important;

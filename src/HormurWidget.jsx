@@ -831,7 +831,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                   right: 0,
                   left: 0,
                   width: '100%',
-                  height: '100vh',
+                  height: '100dvh', // dvh = dynamic viewport height, s'adapte à la barre Safari
+                  maxHeight: '-webkit-fill-available', // Fallback pour anciens navigateurs
                   borderRadius: '0'
                 } : {
                   bottom: isEmbed ? '0' : `${bottomOffset}px`,
@@ -925,9 +926,12 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                 padding: '20px',
                 backgroundColor: '#FFFFFF',
                 WebkitOverflowScrolling: 'touch',
+                minHeight: '0',
                 ...(isMobile ? {
-                  maxHeight: 'calc(100vh - 200px)',
-                  minHeight: '0'
+                  // Forcer la zone de messages à ne pas déborder
+                  flexShrink: 1,
+                  flexGrow: 1,
+                  flexBasis: '0'
                 } : {})
               }}>
                 {messages.map((message, idx) => (
@@ -1099,10 +1103,12 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
               <div style={{
                 flexShrink: 0,
                 padding: '16px',
+                paddingBottom: isMobile ? 'max(16px, env(safe-area-inset-bottom))' : '16px',
                 borderTop: '1px solid #DFDFE9',
                 backgroundColor: '#FEF6F4',
                 position: 'sticky',
-                bottom: 0
+                bottom: 0,
+                zIndex: 10
               }}>
                 {isRecording ? (
                   <div style={{
