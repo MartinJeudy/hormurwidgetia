@@ -457,7 +457,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
       setTimeout(() => {
         setMessages([{
           type: 'bot',
-          content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un événement, un artiste ou un lieu ?",
+          content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un artiste ou un lieu ?",
           showProfileButtons: true
         }]);
       }, 300);
@@ -478,10 +478,10 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
     setUserProfile(profile);
     const profileMessages = {
       spectateur: "Super ! Quelle ville vous intéresse, et pour quand ?",
-      artiste: "Génial ! Quel type de lieu pour votre art ? (appartement, jardin, galerie...)",
-      hote: "Parfait ! Quel type d'artiste recherchez-vous ? (musique, théâtre, arts visuels...)"
+      artiste: "Génial ! Quelle est votre ville et quel type de lieu pour votre art ? (appartement, jardin...)",
+      hote: "Parfait ! Quelle est votre ville et quel type d'artiste recherchez-vous ? (musique, théâtre...)"
     };
-    
+
     setMessages(prev => [...prev, {
       type: 'bot',
       content: profileMessages[profile],
@@ -821,7 +821,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
               />
             )}
             
-            <div 
+            <div
               className="hormur-modal"
               style={{
                 position: 'fixed',
@@ -831,7 +831,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                   right: 0,
                   left: 0,
                   width: '100%',
-                  height: 'auto',
+                  height: '100vh',
                   borderRadius: '0'
                 } : {
                   bottom: isEmbed ? '0' : `${bottomOffset}px`,
@@ -845,7 +845,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                 display: 'flex',
                 flexDirection: 'column',
                 transition: 'all 0.3s',
-                zIndex: 9999
+                zIndex: 9999,
+                overflow: 'hidden'
               }}
             >
               {/* Header */}
@@ -923,7 +924,11 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                 overflowX: 'hidden',
                 padding: '20px',
                 backgroundColor: '#FFFFFF',
-                WebkitOverflowScrolling: 'touch'
+                WebkitOverflowScrolling: 'touch',
+                ...(isMobile ? {
+                  maxHeight: 'calc(100vh - 200px)',
+                  minHeight: '0'
+                } : {})
               }}>
                 {messages.map((message, idx) => (
                   <div key={idx} style={{ marginBottom: '16px' }}>
@@ -960,40 +965,26 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                           {message.showProfileButtons && !userProfile && (
                             <div style={{
                               display: 'grid',
-                              gridTemplateColumns: 'repeat(3, 1fr)',
-                              gap: '8px',
-                              marginTop: '12px'
+                              gridTemplateColumns: 'repeat(2, 1fr)',
+                              gap: '12px',
+                              marginTop: '12px',
+                              maxWidth: '300px'
                             }}>
-                              <button
+                              {/* Bouton Événements temporairement masqué - sera réactivé quand ElasticSearch sera prêt */}
+                              {/* <button
                                 onClick={() => handleProfileSelect('spectateur')}
-                                style={{
-                                  backgroundColor: 'white',
-                                  border: '2px solid #F5D398',
-                                  borderRadius: '12px',
-                                  padding: '12px 8px',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.3s',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(-2px)';
-                                  e.currentTarget.style.borderColor = '#EEB653';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                  e.currentTarget.style.borderColor = '#F5D398';
-                                }}
+                                style={{...}}
                               >
                                 <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎟️</div>
                                 <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Événements</div>
-                              </button>
+                              </button> */}
                               <button
                                 onClick={() => handleProfileSelect('hote')}
                                 style={{
                                   backgroundColor: 'white',
                                   border: '2px solid #F5AF97',
                                   borderRadius: '12px',
-                                  padding: '12px 8px',
+                                  padding: '16px 12px',
                                   cursor: 'pointer',
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
@@ -1007,8 +998,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                                   e.currentTarget.style.borderColor = '#F5AF97';
                                 }}
                               >
-                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎵</div>
-                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Artistes</div>
+                                <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎵</div>
+                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#323242' }}>Artistes</div>
                               </button>
                               <button
                                 onClick={() => handleProfileSelect('artiste')}
@@ -1016,7 +1007,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                                   backgroundColor: 'white',
                                   border: '2px solid #F5A398',
                                   borderRadius: '12px',
-                                  padding: '12px 8px',
+                                  padding: '16px 12px',
                                   cursor: 'pointer',
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
@@ -1030,8 +1021,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                                   e.currentTarget.style.borderColor = '#F5A398';
                                 }}
                               >
-                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🏡</div>
-                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Lieux</div>
+                                <div style={{ fontSize: '32px', marginBottom: '8px' }}>🏡</div>
+                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#323242' }}>Lieux</div>
                               </button>
                             </div>
                           )}
