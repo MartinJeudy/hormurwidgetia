@@ -19,22 +19,33 @@
       html {
         background: rgba(0,0,0,0) !important;
         background-color: rgba(0,0,0,0) !important;
-        /* Support pour les appareils avec encoche iOS */
+        /* Fix hauteur pour tous les navigateurs mobiles */
+        height: 100vh;
         height: 100dvh;
-        height: -webkit-fill-available;
       }
       body {
         background: rgba(0,0,0,0) !important;
         background-color: rgba(0,0,0,0) !important;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        /* Support pour Safari iOS avec barre de navigation */
-        min-height: 100dvh;
-        min-height: -webkit-fill-available;
+        /* Hauteur fixe pour éviter les problèmes de viewport sur Chrome mobile */
+        height: 100%;
+        min-height: 100vh;
+        max-height: 100vh;
+        position: fixed;
+        inset: 0;
       }
       #root {
         background: rgba(0,0,0,0) !important;
         background-color: rgba(0,0,0,0) !important;
+        height: 100%;
+      }
+
+      /* Support spécifique Chrome Android */
+      @supports (-webkit-touch-callout: none) {
+        body {
+          height: -webkit-fill-available;
+        }
       }
     </style>
   </head>
