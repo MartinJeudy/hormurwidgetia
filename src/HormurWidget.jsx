@@ -723,6 +723,13 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
   return (
     <>
       <style>{`
+        /* Fix Chrome mobile viewport */
+        @supports (-webkit-touch-callout: none) {
+          .hormur-modal-mobile {
+            height: -webkit-fill-available !important;
+          }
+        }
+
         @keyframes pulse {
           0%, 100% {
             transform: scale3d(1, 1, 1);
@@ -822,17 +829,14 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
             )}
             
             <div
-              className="hormur-modal"
+              className={`hormur-modal ${isMobile ? 'hormur-modal-mobile' : ''}`}
               style={{
                 position: 'fixed',
                 ...(isMobile ? {
-                  top: 0,
-                  bottom: 0,
-                  right: 0,
-                  left: 0,
+                  inset: 0, // Équivalent à top: 0, right: 0, bottom: 0, left: 0
                   width: '100%',
-                  height: '100dvh', // dvh = dynamic viewport height, s'adapte à la barre Safari
-                  maxHeight: '-webkit-fill-available', // Fallback pour anciens navigateurs
+                  height: '100%', // Utiliser 100% avec inset au lieu de dvh pour meilleure compatibilité Chrome
+                  maxHeight: '100vh', // Contrainte pour éviter le débordement
                   borderRadius: '0'
                 } : {
                   bottom: isEmbed ? '0' : `${bottomOffset}px`,
@@ -853,15 +857,17 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
               {/* Header */}
               <div style={{
                 flexShrink: 0,
-                padding: '16px 20px',
+                flexGrow: 0,
+                padding: isMobile ? '12px 16px' : '16px 20px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 borderBottom: '1px solid #DFDFE9',
                 backgroundColor: '#FEF6F4',
-                position: 'sticky',
+                position: 'relative',
                 top: 0,
-                zIndex: 10
+                zIndex: 10,
+                minHeight: 'auto'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{
@@ -920,19 +926,14 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
               {/* Messages */}
               <div className="hormur-scrollbar" style={{
-                flex: 1,
+                flex: '1 1 0',
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 padding: '20px',
                 backgroundColor: '#FFFFFF',
                 WebkitOverflowScrolling: 'touch',
-                minHeight: '0',
-                ...(isMobile ? {
-                  // Forcer la zone de messages à ne pas déborder
-                  flexShrink: 1,
-                  flexGrow: 1,
-                  flexBasis: '0'
-                } : {})
+                minHeight: 0, // CRUCIAL pour flexbox, permet au conteneur de rétrécir
+                maxHeight: '100%' // Ne jamais dépasser 100% de l'espace disponible
               }}>
                 {messages.map((message, idx) => (
                   <div key={idx} style={{ marginBottom: '16px' }}>
@@ -1102,13 +1103,15 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
               {/* Input */}
               <div style={{
                 flexShrink: 0,
-                padding: '16px',
-                paddingBottom: isMobile ? 'max(16px, env(safe-area-inset-bottom))' : '16px',
+                flexGrow: 0,
+                padding: '12px 16px',
+                paddingBottom: '16px',
                 borderTop: '1px solid #DFDFE9',
                 backgroundColor: '#FEF6F4',
-                position: 'sticky',
+                position: 'relative',
                 bottom: 0,
-                zIndex: 10
+                zIndex: 10,
+                minHeight: 'auto'
               }}>
                 {isRecording ? (
                   <div style={{
