@@ -28,24 +28,12 @@
         background-color: rgba(0,0,0,0) !important;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        /* Hauteur fixe pour éviter les problèmes de viewport sur Chrome mobile */
         height: 100%;
-        min-height: 100vh;
-        max-height: 100vh;
-        position: fixed;
-        inset: 0;
       }
       #root {
         background: rgba(0,0,0,0) !important;
         background-color: rgba(0,0,0,0) !important;
         height: 100%;
-      }
-
-      /* Support spécifique Chrome Android */
-      @supports (-webkit-touch-callout: none) {
-        body {
-          height: -webkit-fill-available;
-        }
       }
     </style>
   </head>

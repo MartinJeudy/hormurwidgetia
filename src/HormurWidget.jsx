@@ -11,6 +11,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 0);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -474,6 +475,38 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
     }
   }, [isOpen, isEmbed]);
 
+  // Détecter les changements de hauteur du viewport (barre Chrome qui apparaît/disparaît)
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      // Utiliser visualViewport si disponible (meilleur pour mobile)
+      if (window.visualViewport) {
+        setViewportHeight(window.visualViewport.height);
+      } else {
+        setViewportHeight(window.innerHeight);
+      }
+    };
+
+    // Mettre à jour immédiatement
+    updateViewportHeight();
+
+    // Écouter les changements de viewport
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', updateViewportHeight);
+      window.visualViewport.addEventListener('scroll', updateViewportHeight);
+    }
+
+    // Fallback pour les anciens navigateurs
+    window.addEventListener('resize', updateViewportHeight);
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', updateViewportHeight);
+        window.visualViewport.removeEventListener('scroll', updateViewportHeight);
+      }
+      window.removeEventListener('resize', updateViewportHeight);
+    };
+  }, []);
+
   const handleProfileSelect = (profile) => {
     setUserProfile(profile);
     const profileMessages = {
@@ -723,13 +756,6 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
   return (
     <>
       <style>{`
-        /* Fix Chrome mobile viewport */
-        @supports (-webkit-touch-callout: none) {
-          .hormur-modal-mobile {
-            height: -webkit-fill-available !important;
-          }
-        }
-
         @keyframes pulse {
           0%, 100% {
             transform: scale3d(1, 1, 1);
@@ -833,10 +859,13 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
               style={{
                 position: 'fixed',
                 ...(isMobile ? {
-                  inset: 0, // Équivalent à top: 0, right: 0, bottom: 0, left: 0
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
                   width: '100%',
-                  height: '100%', // Utiliser 100% avec inset au lieu de dvh pour meilleure compatibilité Chrome
-                  maxHeight: '100vh', // Contrainte pour éviter le débordement
+                  height: `${viewportHeight}px`, // Hauteur dynamique qui s'adapte à la barre Chrome
+                  maxHeight: `${viewportHeight}px`,
                   borderRadius: '0'
                 } : {
                   bottom: isEmbed ? '0' : `${bottomOffset}px`,
@@ -849,7 +878,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                 boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                 display: 'flex',
                 flexDirection: 'column',
-                transition: 'all 0.3s',
+                transition: 'height 0.2s ease-out', // Transition douce pour les changements de hauteur
                 zIndex: 9999,
                 overflow: 'hidden'
               }}
