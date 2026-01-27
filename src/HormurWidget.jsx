@@ -477,13 +477,22 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
   // Détecter les changements de hauteur du viewport (barre Chrome qui apparaît/disparaît)
   useEffect(() => {
+    const BOTTOM_SAFE_MARGIN = 80; // Marge de sécurité pour la barre de navigation mobile
+
     const updateViewportHeight = () => {
+      let rawHeight;
+
       // Utiliser visualViewport si disponible (meilleur pour mobile)
       if (window.visualViewport) {
-        setViewportHeight(window.visualViewport.height);
+        rawHeight = window.visualViewport.height;
       } else {
-        setViewportHeight(window.innerHeight);
+        rawHeight = window.innerHeight;
       }
+
+      // Soustraire une marge de sécurité pour s'assurer que le champ reste visible
+      // au-dessus de la barre de navigation mobile
+      const safeHeight = rawHeight - BOTTOM_SAFE_MARGIN;
+      setViewportHeight(safeHeight);
     };
 
     // Mettre à jour immédiatement
