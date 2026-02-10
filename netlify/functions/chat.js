@@ -174,7 +174,8 @@ exports.handler = async (event) => {
         message: n8nData.message || "Réponse reçue",
         transcribedText: audioData ? finalMessage : undefined, // Renvoyer la transcription
         results: Array.isArray(n8nData.results) ? n8nData.results : [],
-        showCalendly: n8nData.showCalendly || false
+        showCalendly: n8nData.showCalendly || false,
+        redirect_url: n8nData.redirect_url || null
       })
     };
 
