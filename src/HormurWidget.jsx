@@ -546,6 +546,111 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
   };
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🔗 RENDU DES MESSAGES AVEC LIENS CLIQUABLES
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  const renderMessageContent = (content) => {
+    if (!content) return null;
+
+    // Regex pour détecter les liens markdown [texte](url)
+    const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+
+    // Vérifier s'il y a des liens markdown
+    if (!markdownLinkRegex.test(content)) {
+      return (
+        <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: 0, whiteSpace: 'pre-line' }}>
+          {content}
+        </p>
+      );
+    }
+
+    // Reset regex lastIndex après test()
+    markdownLinkRegex.lastIndex = 0;
+
+    // Séparer le texte et les liens
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = markdownLinkRegex.exec(content)) !== null) {
+      // Texte avant le lien
+      if (match.index > lastIndex) {
+        const textBefore = content.slice(lastIndex, match.index);
+        if (textBefore.trim()) {
+          parts.push({ type: 'text', value: textBefore });
+        }
+      }
+      // Le lien lui-même
+      parts.push({ type: 'link', label: match[1], url: match[2] });
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Texte restant après le dernier lien
+    if (lastIndex < content.length) {
+      const remaining = content.slice(lastIndex);
+      if (remaining.trim()) {
+        parts.push({ type: 'text', value: remaining });
+      }
+    }
+
+    return (
+      <div>
+        {parts.map((part, i) => {
+          if (part.type === 'text') {
+            return (
+              <p key={i} style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: '0 0 4px 0', whiteSpace: 'pre-line' }}>
+                {part.value.trim()}
+              </p>
+            );
+          }
+          if (part.type === 'link') {
+            return (
+              <a
+                key={i}
+                href={part.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginTop: '8px',
+                  marginBottom: '4px',
+                  padding: '10px 18px',
+                  borderRadius: '9999px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  textDecoration: 'none',
+                  transition: 'all 0.3s',
+                  background: 'linear-gradient(to right, #ef4444, #f97316)',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(238,101,83,0.3)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.9';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(238,101,83,0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 6px rgba(238,101,83,0.3)';
+                }}
+              >
+                {part.label}
+                <span style={{ fontSize: '16px' }}>→</span>
+              </a>
+            );
+          }
+          return null;
+        })}
+      </div>
+    );
+  };
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // 🎨 COMPOSANTS
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1000,9 +1105,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                             wordWrap: 'break-word',
                             overflowWrap: 'break-word'
                           }}>
-                            <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: 0, whiteSpace: 'pre-line' }}>
-                              {message.content}
-                            </p>
+                            {renderMessageContent(message.content)}
                           </div>
                           
                           {message.showProfileButtons && !userProfile && (
