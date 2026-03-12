@@ -22,7 +22,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   // 💾 SYSTÈME DE CACHE
   // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  
+
   const CACHE_DURATION = 10 * 60 * 1000;
 
   const getCacheKey = (message, profile) => {
@@ -38,17 +38,17 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
     try {
       const cacheKey = getCacheKey(message, profile);
       const cached = localStorage.getItem(cacheKey);
-      
+
       if (!cached) return null;
-      
+
       const { data, timestamp } = JSON.parse(cached);
       const age = Date.now() - timestamp;
-      
+
       if (age > CACHE_DURATION) {
         localStorage.removeItem(cacheKey);
         return null;
       }
-      
+
       console.log('✅ Cache hit:', message.substring(0, 50));
       return data;
     } catch (e) {
@@ -63,7 +63,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         data,
         timestamp: Date.now()
       }));
-      
+
       const allKeys = Object.keys(localStorage).filter(k => k.startsWith('hormur_cache_'));
       if (allKeys.length > 50) {
         allKeys.slice(0, allKeys.length - 50).forEach(k => localStorage.removeItem(k));
@@ -89,9 +89,9 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
   const startRecording = async () => {
     try {
       setInputValue('');
-      
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
+
       // Initialiser l'analyse audio pour la visualisation
       audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
       analyserRef.current = audioContextRef.current.createAnalyser();
@@ -99,21 +99,21 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
       source.connect(analyserRef.current);
       analyserRef.current.fftSize = 256;
       analyzeAudio();
-      
+
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: 'audio/webm;codecs=opus'
       });
-      
+
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      
+
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           audioChunksRef.current.push(e.data);
           console.log('📼 Chunk audio reçu:', e.data.size, 'bytes');
         }
       };
-      
+
       mediaRecorder.onstop = () => {
         console.log('🛑 Enregistrement arrêté. Total chunks:', audioChunksRef.current.length);
         stream.getTracks().forEach(track => track.stop());
@@ -124,7 +124,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
           audioContextRef.current.close();
         }
       };
-      
+
       mediaRecorder.start(100);
       setIsRecording(true);
       console.log('🎙️ Enregistrement démarré');
@@ -140,7 +140,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
       // Créer une Promise pour attendre que le MediaRecorder soit vraiment arrêté
       return new Promise((resolve) => {
         const recorder = mediaRecorderRef.current;
-        
+
         recorder.onstop = async () => {
           // Fermer les ressources audio
           const stream = recorder.stream;
@@ -151,13 +151,13 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
           if (audioContextRef.current) {
             audioContextRef.current.close();
           }
-          
+
           setIsRecording(false);
           setAudioLevel(0);
-          
+
           // Attendre un petit délai pour s'assurer que tous les chunks sont arrivés
           await new Promise(wait => setTimeout(wait, 200));
-          
+
           // Vérifier s'il y a vraiment du son enregistré
           if (audioChunksRef.current.length === 0) {
             console.log('⚠️ Aucun audio enregistré');
@@ -166,7 +166,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
           }
 
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          
+
           // Vérifier la taille du blob (minimum 1KB)
           if (audioBlob.size < 1000) {
             console.log('⚠️ Audio trop court:', audioBlob.size, 'bytes');
@@ -176,13 +176,13 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
           }
 
           console.log('📦 Taille blob audio:', Math.round(audioBlob.size / 1024) + 'KB');
-          
+
           try {
             const reader = new FileReader();
             reader.onloadend = async () => {
               setIsTranscribing(true);
               setInputValue('🎤 Transcription...');
-              
+
               try {
                 const response = await fetch('/.netlify/functions/chat', {
                   method: 'POST',
@@ -195,10 +195,10 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                     timestamp: new Date().toISOString()
                   })
                 });
-                
+
                 const data = await response.json();
                 setIsTranscribing(false);
-                
+
                 if (data.transcribedText && data.transcribedText.trim()) {
                   setInputValue(data.transcribedText);
                 } else {
@@ -210,7 +210,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                 setIsTranscribing(false);
                 setInputValue('');
               }
-              
+
               audioChunksRef.current = [];
               resolve();
             };
@@ -223,7 +223,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
             resolve();
           }
         };
-        
+
         // Déclencher l'arrêt
         recorder.stop();
       });
@@ -236,7 +236,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       setAudioLevel(0);
-      
+
       setTimeout(async () => {
         // Vérifier s'il y a vraiment du son enregistré
         if (audioChunksRef.current.length === 0) {
@@ -245,7 +245,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         }
 
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
+
         // Vérifier la taille du blob
         if (audioBlob.size < 1000) {
           console.log('⚠️ Audio trop court ou vide');
@@ -254,10 +254,10 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         }
 
         console.log('📦 Envoi direct - Taille blob:', Math.round(audioBlob.size / 1024) + 'KB');
-        
+
         setIsTranscribing(true);
         setInputValue('🎤 Transcription...');
-        
+
         try {
           const audioData = await new Promise((resolve) => {
             const reader = new FileReader();
@@ -278,14 +278,14 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
           });
 
           const data = await response.json();
-          
+
           // Mettre à jour l'input avec la transcription
           if (data.transcribedText) {
             setInputValue(data.transcribedText);
           }
-          
+
           setIsTranscribing(false);
-          
+
           // Maintenant envoyer le message transcrit
           if (data.transcribedText) {
             // Ajouter le message utilisateur avec la transcription
@@ -294,10 +294,10 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
               content: data.transcribedText,
               isVocal: true
             }]);
-            
+
             setInputValue('');
             setIsLoading(true);
-            
+
             if (data.sessionId && !sessionId) setSessionId(data.sessionId);
 
             setMessages(prev => [...prev, {
@@ -306,17 +306,17 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
               results: Array.isArray(data.results) ? data.results : [],
               showCalendly: data.showCalendly === true
             }]);
-            
+
             setIsLoading(false);
           }
-          
+
           audioChunksRef.current = [];
         } catch (error) {
           console.error('Erreur:', error);
           setIsTranscribing(false);
           setInputValue('');
           audioChunksRef.current = [];
-          
+
           setMessages(prev => [...prev, {
             type: 'bot',
             content: "Problème technique. Pouvez-vous réessayer ?",
@@ -334,7 +334,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
   const handleSendMessage = async () => {
     const hasTextToSend = inputValue.trim().length > 0;
-    
+
     if (!hasTextToSend || isLoading || isTranscribing) {
       console.log('❌ Rien à envoyer ou déjà en cours');
       return;
@@ -342,9 +342,9 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
     const startTime = performance.now();
     const userMessage = inputValue.trim();
-    
+
     setInputValue('');
-    
+
     setMessages(prev => [...prev, {
       type: 'user',
       content: userMessage,
@@ -359,14 +359,14 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
       if (cached) {
         const cacheTime = performance.now() - startTime;
         console.log(`⚡ Cache hit: ${cacheTime.toFixed(0)}ms`);
-        
+
         setMessages(prev => [...prev, {
           type: 'bot',
           content: cached.message,
           results: cached.results || [],
           showCalendly: cached.showCalendly || false
         }]);
-        
+
         setIsLoading(false);
         return;
       }
@@ -378,7 +378,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
       const response = await fetch('/.netlify/functions/chat', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
@@ -400,9 +400,9 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
       const data = await response.json();
       const totalTime = performance.now() - startTime;
-      
+
       console.log(`✅ Réponse reçue: ${totalTime.toFixed(0)}ms`, data);
-      
+
       if (data.sessionId && !sessionId) {
         setSessionId(data.sessionId);
       }
@@ -425,11 +425,11 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
 
     } catch (error) {
       console.error('❌ Erreur:', error);
-      
-      const errorMessage = error.name === 'AbortError' 
+
+      const errorMessage = error.name === 'AbortError'
         ? "La requête a pris trop de temps. Réessayez avec une question plus simple"
         : "Problème technique. Pouvez-vous réessayer ?";
-      
+
       setMessages(prev => [...prev, {
         type: 'bot',
         content: errorMessage,
@@ -564,15 +564,15 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         cursor: 'pointer',
         width: '100%'
       }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.15)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-      }}>
-        
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+        }}>
+
         {youtubeId ? (
           <div style={{
             width: '100%',
@@ -599,8 +599,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
             />
           </div>
         ) : result.image_url ? (
-          <img 
-            src={result.image_url} 
+          <img
+            src={result.image_url}
             alt={result.title}
             style={{
               width: '100%',
@@ -644,36 +644,36 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
           }}>
             {result.title || 'Sans titre'}
           </h4>
-          
+
           {(result.city || result.date) && (
             <p style={{ fontSize: '14px', color: '#5E5E8F', margin: '0 0 8px 0', fontWeight: '500' }}>
               {result.city}{result.city && result.date ? ' • ' : ''}{result.date}
             </p>
           )}
-          
+
           {result.genre && (
-            <p style={{ 
-              fontSize: '13px', 
-              color: '#7E7EA5', 
+            <p style={{
+              fontSize: '13px',
+              color: '#7E7EA5',
               marginTop: '6px',
               marginBottom: '10px'
             }}>
               {result.genre}
             </p>
           )}
-          
+
           {result.visualPrice && (
-            <p style={{ 
-              fontSize: '14px', 
-              color: '#EE7951', 
+            <p style={{
+              fontSize: '14px',
+              color: '#EE7951',
               marginTop: '10px',
               marginBottom: '14px',
-              fontWeight: '600' 
+              fontWeight: '600'
             }}>
               {result.visualPrice}
             </p>
           )}
-          
+
           {result.url && (
             <a
               href={result.url}
@@ -715,8 +715,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
   };
 
   const CalendlyButtons = ({ profile }) => {
-    const buttons = profile === 'artiste' 
-      ? [{ label: 'Discuter avec Éléonore', url: 'https://calendly.com/eleonore-hormur/15min' }] 
+    const buttons = profile === 'artiste'
+      ? [{ label: 'Discuter avec Éléonore', url: 'https://calendly.com/eleonore-hormur/15min' }]
       : [{ label: 'Échanger avec Martin', url: 'https://calendly.com/martin-jeudy/15min' }];
 
     return (
@@ -862,7 +862,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                 onClick={() => setIsOpen(false)}
               />
             )}
-            
+
             <div
               className={`hormur-modal ${isMobile ? 'hormur-modal-mobile' : ''}`}
               style={{
@@ -883,7 +883,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                   height: isEmbed ? '100%' : 'min(600px, 85vh)',
                   borderRadius: isEmbed ? '24px' : '24px'
                 }),
-                backgroundColor: 'white',
+                background: 'white',
+                transform: 'translateZ(0)',
                 boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -918,11 +919,11 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                     flexShrink: 0,
                     overflow: 'hidden'
                   }}>
-                    <img 
-                      src="/icone logo hormur.svg" 
-                      alt="Logo Hormur" 
-                      style={{ 
-                        width: '42px', 
+                    <img
+                      src="/icone logo hormur.svg"
+                      alt="Logo Hormur"
+                      style={{
+                        width: '42px',
                         height: '42px',
                         display: 'block',
                         objectFit: 'cover'
@@ -1004,7 +1005,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                               {message.content}
                             </p>
                           </div>
-                          
+
                           {message.showProfileButtons && !userProfile && (
                             <div style={{
                               display: 'grid',
@@ -1270,7 +1271,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                     >
                       <Mic size={20} color="#5E5E8F" />
                     </button>
-                    
+
                     <input
                       type="text"
                       value={inputValue}
@@ -1293,7 +1294,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                       onFocus={(e) => (e.target.style.borderColor = '#7E7EA5')}
                       onBlur={(e) => (e.target.style.borderColor = '#DFDFE9')}
                     />
-                    
+
                     <button
                       onClick={handleSendMessage}
                       disabled={inputValue.trim().length === 0 || isLoading}
