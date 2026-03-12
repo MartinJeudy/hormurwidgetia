@@ -910,7 +910,6 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         }
         .hormur-floating-btn {
           animation: pulse 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-          will-change: transform;
           backface-visibility: hidden;
           -webkit-backface-visibility: hidden;
           -moz-backface-visibility: hidden;
@@ -919,7 +918,6 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         }
         .hormur-modal {
           animation: slideUp 0.3s ease-out;
-          will-change: transform, opacity;
         }
         .audio-bar { animation: wave 0.5s ease-in-out infinite; }
       `}</style>
