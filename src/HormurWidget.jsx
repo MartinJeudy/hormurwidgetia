@@ -475,6 +475,15 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
     }
   }, [isOpen, isEmbed]);
 
+  // Fix pour la Navigation Privée Firefox :
+  // Forcer un fond opaque sur l'ensemble du document racine *uniquement*
+  // quand le widget est ouvert pour bloquer les bugs de compositing couche alpha.
+  useEffect(() => {
+    if (isEmbed) {
+      document.documentElement.style.backgroundColor = isOpen ? '#FFFFFF' : 'transparent';
+    }
+  }, [isOpen, isEmbed]);
+
   // Détecter les changements de hauteur du viewport (barre Chrome qui apparaît/disparaît)
   useEffect(() => {
     const BOTTOM_SAFE_MARGIN = 80; // Marge de sécurité pour la barre de navigation mobile
