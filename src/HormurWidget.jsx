@@ -475,6 +475,20 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
     }
   }, [isOpen, isEmbed]);
 
+  // Écouter les commandes d'ouverture/fermeture envoyées par le parent (mode embed)
+  useEffect(() => {
+    if (!isEmbed) return;
+
+    const handleParentCommand = (event) => {
+      if (!event.data?.type) return;
+      if (event.data.type === 'HORMUR_WIDGET_OPEN') setIsOpen(true);
+      if (event.data.type === 'HORMUR_WIDGET_CLOSE') setIsOpen(false);
+    };
+
+    window.addEventListener('message', handleParentCommand);
+    return () => window.removeEventListener('message', handleParentCommand);
+  }, [isEmbed]);
+
 
   // Détecter les changements de hauteur du viewport (barre Chrome qui apparaît/disparaît)
   useEffect(() => {
@@ -924,31 +938,34 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
       `}</style>
 
       <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif', background: 'transparent', backgroundColor: 'transparent' }}>
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className="hormur-floating-btn"
-          style={{
-            position: 'fixed',
-            bottom: isEmbed ? '15px' : `${bottomOffset}px`,
-            right: isEmbed ? '15px' : '20px',
-            width: '64px',
-            height: '64px',
-            borderRadius: '50%',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.3s',
-            background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)',
-            border: 'none',
-            cursor: 'pointer',
-            transform: isOpen ? 'scale(0)' : 'scale(1)',
-            opacity: isOpen ? 0 : 1
-          }}
-          aria-label="Ouvrir l'assistant Hormur"
-        >
-          <MessageCircle color="white" size={28} />
-        </button>
+        {/* Le FAB interne est masqué en mode embed : c'est le site parent qui déclenche l'ouverture via postMessage */}
+        {!isEmbed && (
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="hormur-floating-btn"
+            style={{
+              position: 'fixed',
+              bottom: `${bottomOffset}px`,
+              right: '20px',
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.3s',
+              background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)',
+              border: 'none',
+              cursor: 'pointer',
+              transform: isOpen ? 'scale(0)' : 'scale(1)',
+              opacity: isOpen ? 0 : 1
+            }}
+            aria-label="Ouvrir l'assistant Hormur"
+          >
+            <MessageCircle color="white" size={28} />
+          </button>
+        )}
 
         {isOpen && (
           <>
