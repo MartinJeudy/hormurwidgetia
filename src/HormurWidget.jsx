@@ -458,7 +458,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
       setTimeout(() => {
         setMessages([{
           type: 'bot',
-          content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un artiste ou un lieu ?",
+          content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un artiste, un lieu ou un événement ?",
           showProfileButtons: true
         }]);
       }, 300);
@@ -1128,26 +1128,18 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                           {message.showProfileButtons && !userProfile && (
                             <div style={{
                               display: 'grid',
-                              gridTemplateColumns: 'repeat(2, 1fr)',
-                              gap: '12px',
+                              gridTemplateColumns: 'repeat(3, 1fr)',
+                              gap: '8px',
                               marginTop: '12px',
-                              maxWidth: '300px'
+                              maxWidth: '380px'
                             }}>
-                              {/* Bouton Événements temporairement masqué - sera réactivé quand ElasticSearch sera prêt */}
-                              {/* <button
-                                onClick={() => handleProfileSelect('spectateur')}
-                                style={{...}}
-                              >
-                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎟️</div>
-                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Événements</div>
-                              </button> */}
                               <button
                                 onClick={() => handleProfileSelect('hote')}
                                 style={{
                                   backgroundColor: 'white',
                                   border: '2px solid #F5AF97',
                                   borderRadius: '12px',
-                                  padding: '16px 12px',
+                                  padding: '14px 8px',
                                   cursor: 'pointer',
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
@@ -1161,8 +1153,8 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                                   e.currentTarget.style.borderColor = '#F5AF97';
                                 }}
                               >
-                                <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎵</div>
-                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#323242' }}>Artistes</div>
+                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎵</div>
+                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Artistes</div>
                               </button>
                               <button
                                 onClick={() => handleProfileSelect('artiste')}
@@ -1170,7 +1162,7 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                                   backgroundColor: 'white',
                                   border: '2px solid #F5A398',
                                   borderRadius: '12px',
-                                  padding: '16px 12px',
+                                  padding: '14px 8px',
                                   cursor: 'pointer',
                                   transition: 'all 0.3s',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
@@ -1184,8 +1176,31 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
                                   e.currentTarget.style.borderColor = '#F5A398';
                                 }}
                               >
-                                <div style={{ fontSize: '32px', marginBottom: '8px' }}>🏡</div>
-                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#323242' }}>Lieux</div>
+                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🏡</div>
+                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Lieux</div>
+                              </button>
+                              <button
+                                onClick={() => handleProfileSelect('spectateur')}
+                                style={{
+                                  backgroundColor: 'white',
+                                  border: '2px solid #F5C497',
+                                  borderRadius: '12px',
+                                  padding: '14px 8px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.3s',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(-2px)';
+                                  e.currentTarget.style.borderColor = '#EEB653';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'translateY(0)';
+                                  e.currentTarget.style.borderColor = '#F5C497';
+                                }}
+                              >
+                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎟️</div>
+                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Événements</div>
                               </button>
                             </div>
                           )}
