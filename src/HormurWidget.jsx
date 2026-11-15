@@ -1,413 +1,370 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Sparkles, Mic, Square } from 'lucide-react';
+import {
+  X, Send, Mic, Square, RotateCcw, ChevronRight, ArrowUpRight,
+  Calendar, Music, Home, Ticket, Play, Image as ImageIcon, MessageCircle
+} from 'lucide-react';
+import styles from './widgetStyles';
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Réglages
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const CHAT_URL = '/.netlify/functions/chat';
+const CACHE_DURATION = 10 * 60 * 1000;
+const REQUEST_TIMEOUT = 28000;
+// Conversation gardée le temps de la visite : fermer puis rouvrir le widget,
+// ou changer de page, ne fait pas perdre les résultats.
+const CONVERSATION_KEY = 'hormur_widget_conversation_v2';
+const MAX_SAVED_MESSAGES = 40;
+// Marge gardée en bas sur téléphone quand le site hôte ne gère pas lui-même
+// la hauteur visible (ancienne intégration).
+const LEGACY_BOTTOM_MARGIN = 80;
+
+const WELCOME = 'Bonjour ! Que cherchez-vous sur Hormur ?';
+
+// Les trois recherches possibles. La clef « profile » est celle attendue par
+// l'agent : qui cherche un artiste est un hôte, qui cherche un lieu est un
+// artiste, qui cherche un événement est un spectateur.
+const CHOICES = [
+  {
+    profile: 'spectateur',
+    Icon: Ticket,
+    label: 'Un événement',
+    desc: 'Concert, spectacle ou exposition près de chez vous',
+    said: 'Je cherche un événement',
+    reply: 'Dans quelle ville, et pour quand ?',
+    placeholder: 'Ex. : Lyon, ce week-end'
+  },
+  {
+    profile: 'hote',
+    Icon: Music,
+    label: 'Un artiste',
+    desc: 'Pour une soirée chez vous ou dans votre lieu',
+    said: 'Je cherche un artiste',
+    reply: "Dans quelle ville, et quel type d'artiste cherchez-vous ? (musique, théâtre…)",
+    placeholder: 'Ex. : Nantes, un duo de jazz'
+  },
+  {
+    profile: 'artiste',
+    Icon: Home,
+    label: 'Un lieu',
+    desc: 'Pour présenter votre art',
+    said: 'Je cherche un lieu',
+    reply: 'Dans quelle ville, et quel type de lieu cherchez-vous pour votre art ? (appartement, jardin…)',
+    placeholder: 'Ex. : Bordeaux, un salon ou un jardin'
+  }
+];
+
+const TYPE_LABELS = {
+  artiste: 'Artiste',
+  artist: 'Artiste',
+  lieu: 'Lieu',
+  place: 'Lieu',
+  evenement: 'Événement',
+  'événement': 'Événement',
+  event: 'Événement'
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Outils
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const loadConversation = () => {
+  try {
+    const raw = sessionStorage.getItem(CONVERSATION_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!saved || !Array.isArray(saved.messages) || saved.messages.length === 0) return null;
+    return saved;
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveConversation = (conversation) => {
+  try {
+    sessionStorage.setItem(CONVERSATION_KEY, JSON.stringify(conversation));
+  } catch (e) { /* stockage indisponible : la conversation vit le temps de l'onglet */ }
+};
+
+const clearConversation = () => {
+  try {
+    sessionStorage.removeItem(CONVERSATION_KEY);
+  } catch (e) { /* rien à effacer */ }
+};
+
+const getCacheKey = (message, profile) => {
+  const normalized = message.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .sort()
+    .join('_');
+  return `hormur_cache_${profile}_${normalized}`;
+};
+
+const getCachedResponse = (message, profile) => {
+  try {
+    const cacheKey = getCacheKey(message, profile);
+    const cached = localStorage.getItem(cacheKey);
+    if (!cached) return null;
+    const { data, timestamp } = JSON.parse(cached);
+    if (Date.now() - timestamp > CACHE_DURATION) {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+    return data;
+  } catch (e) {
+    return null;
+  }
+};
+
+const setCachedResponse = (message, profile, data) => {
+  try {
+    localStorage.setItem(getCacheKey(message, profile), JSON.stringify({ data, timestamp: Date.now() }));
+    const allKeys = Object.keys(localStorage).filter((k) => k.startsWith('hormur_cache_'));
+    if (allKeys.length > 50) {
+      allKeys.slice(0, allKeys.length - 50).forEach((k) => localStorage.removeItem(k));
+    }
+  } catch (e) { /* stockage indisponible : pas de mémoire des réponses */ }
+};
+
+const extractYouTubeId = (url) => {
+  if (!url) return null;
+  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[7].length === 11) ? match[7] : null;
+};
+
+// Format d'enregistrement accepté par le navigateur (Safari n'écrit pas de webm).
+const pickAudioMime = () => {
+  if (typeof MediaRecorder === 'undefined') return '';
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+  for (const candidate of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(candidate)) return candidate;
+    } catch (e) { /* navigateur sans isTypeSupported */ }
+  }
+  return '';
+};
+
+const canRecordAudio = () =>
+  typeof navigator !== 'undefined' &&
+  !!navigator.mediaDevices &&
+  typeof navigator.mediaDevices.getUserMedia === 'function' &&
+  typeof MediaRecorder !== 'undefined';
+
+const blobToBase64 = (blob) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onloadend = () => resolve(String(reader.result).split(',')[1]);
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(blob);
+});
+
+const readHostManaged = () => {
+  try {
+    return new URLSearchParams(window.location.search).get('v') === '2';
+  } catch (e) {
+    return false;
+  }
+};
+
+const isCoarsePointer = () => {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches;
+  } catch (e) {
+    return false;
+  }
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Morceaux d'affichage
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Texte d'une réponse, avec les liens markdown [texte](url) rendus en boutons.
+const MessageContent = ({ content }) => {
+  if (!content) return null;
+  const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = linkRegex.exec(content)) !== null) {
+    const before = content.slice(lastIndex, match.index);
+    if (before.trim()) parts.push({ type: 'text', value: before.trim() });
+    parts.push({ type: 'link', label: match[1], url: match[2] });
+    lastIndex = match.index + match[0].length;
+  }
+  const rest = content.slice(lastIndex);
+  if (rest.trim()) parts.push({ type: 'text', value: rest.trim() });
+
+  return (
+    <>
+      {parts.map((part, i) => (part.type === 'text' ? (
+        <p key={i}>{part.value}</p>
+      ) : (
+        <a key={i} className="hw-link" href={part.url} target="_blank" rel="noopener noreferrer">
+          {part.label}
+          <ArrowUpRight size={16} aria-hidden="true" />
+        </a>
+      )))}
+    </>
+  );
+};
+
+const ResultCard = ({ result }) => {
+  const [imageFailed, setImageFailed] = useState(false);
+  const youtubeId = extractYouTubeId(result.video_url);
+  const image = result.image_url || (youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null);
+  const typeLabel = TYPE_LABELS[String(result.type || '').toLowerCase()];
+  const meta = [result.city, result.date].filter(Boolean).join(' · ');
+  const title = result.title || 'Sans titre';
+
+  const inner = (
+    <>
+      <div className="hw-card-media">
+        {image && !imageFailed ? (
+          <img src={image} alt="" loading="lazy" onError={() => setImageFailed(true)} />
+        ) : (
+          <ImageIcon size={26} aria-hidden="true" />
+        )}
+        {youtubeId && <span className="hw-card-play" aria-hidden="true"><Play size={12} fill="currentColor" /></span>}
+      </div>
+      <div className="hw-card-body">
+        {typeLabel && <span className="hw-card-type">{typeLabel}</span>}
+        <h4 className="hw-card-title">{title}</h4>
+        {meta && <p className="hw-card-meta">{meta}</p>}
+        {result.genre && <p className="hw-card-meta">{result.genre}</p>}
+        {result.visualPrice && <p className="hw-card-price">{result.visualPrice}</p>}
+      </div>
+      {result.url && <ChevronRight className="hw-card-arrow" size={18} aria-hidden="true" />}
+    </>
+  );
+
+  if (!result.url) return <div className="hw-card">{inner}</div>;
+
+  return (
+    <a
+      className="hw-card"
+      href={result.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${title}, voir la fiche (nouvel onglet)`}
+    >
+      {inner}
+    </a>
+  );
+};
+
+const CalendlyButton = ({ profile }) => {
+  const button = profile === 'artiste'
+    ? { label: 'Discuter avec Éléonore', url: 'https://calendly.com/eleonore-hormur/15min' }
+    : { label: 'Échanger avec Martin', url: 'https://calendly.com/martin-jeudy/15min' };
+
+  return (
+    <a className="hw-secondary" href={button.url} target="_blank" rel="noopener noreferrer">
+      <Calendar size={16} aria-hidden="true" />
+      {button.label}
+    </a>
+  );
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Widget
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
+  const [initial] = useState(loadConversation);
+  const [hostManaged] = useState(() => isEmbed && readHostManaged());
+  const [recordingSupported] = useState(canRecordAudio);
+
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => (initial ? initial.messages : []));
   const [inputValue, setInputValue] = useState('');
-  const [userProfile, setUserProfile] = useState(null);
+  const [userProfile, setUserProfile] = useState(() => (initial ? initial.userProfile || null : null));
+  const [sessionId, setSessionId] = useState(() => (initial ? initial.sessionId || null : null));
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
+  const [loadingStep, setLoadingStep] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
-  const [viewportHeight, setViewportHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 0);
-  const messagesEndRef = useRef(null);
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window !== 'undefined' ? window.innerWidth : 0,
+    height: typeof window !== 'undefined' ? window.innerHeight : 0
+  }));
+
+  const threadEndRef = useRef(null);
+  const lastBotRef = useRef(null);
+  const inputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 💾 SYSTÈME DE CACHE
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const activeChoice = CHOICES.find((choice) => choice.profile === userProfile);
+  const hasConversation = messages.some((message) => message.type === 'user');
+  const busy = isLoading || isTranscribing;
+  const canSend = inputValue.trim().length > 0 && !busy;
 
-  const CACHE_DURATION = 10 * 60 * 1000;
+  // ───── Conversation ─────
 
-  const getCacheKey = (message, profile) => {
-    const normalized = message.toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .split(/\s+/)
-      .sort()
-      .join('_');
-    return `hormur_cache_${profile}_${normalized}`;
+  const pushMessages = (...added) => setMessages((prev) => [...prev, ...added]);
+
+  const botReply = (data) => ({
+    type: 'bot',
+    content: data.message || "Désolé, je n'ai pas de réponse.",
+    results: Array.isArray(data.results) ? data.results : [],
+    showCalendly: data.showCalendly === true
+  });
+
+  const botError = (content) => ({ type: 'bot', content, results: [], showCalendly: true });
+
+  const requestChat = async (body, signal) => {
+    const response = await fetch(CHAT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        userProfile: userProfile || 'indefini',
+        sessionId: sessionId || null,
+        timestamp: new Date().toISOString(),
+        ...body
+      }),
+      signal
+    });
+    return response;
   };
-
-  const getCachedResponse = (message, profile) => {
-    try {
-      const cacheKey = getCacheKey(message, profile);
-      const cached = localStorage.getItem(cacheKey);
-
-      if (!cached) return null;
-
-      const { data, timestamp } = JSON.parse(cached);
-      const age = Date.now() - timestamp;
-
-      if (age > CACHE_DURATION) {
-        localStorage.removeItem(cacheKey);
-        return null;
-      }
-
-      console.log('✅ Cache hit:', message.substring(0, 50));
-      return data;
-    } catch (e) {
-      return null;
-    }
-  };
-
-  const setCachedResponse = (message, profile, data) => {
-    try {
-      const cacheKey = getCacheKey(message, profile);
-      localStorage.setItem(cacheKey, JSON.stringify({
-        data,
-        timestamp: Date.now()
-      }));
-
-      const allKeys = Object.keys(localStorage).filter(k => k.startsWith('hormur_cache_'));
-      if (allKeys.length > 50) {
-        allKeys.slice(0, allKeys.length - 50).forEach(k => localStorage.removeItem(k));
-      }
-    } catch (e) {
-      console.warn('Cache storage failed:', e);
-    }
-  };
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 🎤 GESTION AUDIO
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  const analyzeAudio = () => {
-    if (!analyserRef.current) return;
-    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-    analyserRef.current.getByteFrequencyData(dataArray);
-    const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-    setAudioLevel(Math.min(100, average / 1.28));
-    animationFrameRef.current = requestAnimationFrame(analyzeAudio);
-  };
-
-  const startRecording = async () => {
-    try {
-      setInputValue('');
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // Initialiser l'analyse audio pour la visualisation
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
-      analyserRef.current.fftSize = 256;
-      analyzeAudio();
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
-
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-          console.log('📼 Chunk audio reçu:', e.data.size, 'bytes');
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        console.log('🛑 Enregistrement arrêté. Total chunks:', audioChunksRef.current.length);
-        stream.getTracks().forEach(track => track.stop());
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-        if (audioContextRef.current) {
-          audioContextRef.current.close();
-        }
-      };
-
-      mediaRecorder.start(100);
-      setIsRecording(true);
-      console.log('🎙️ Enregistrement démarré');
-    } catch (error) {
-      console.error('Erreur microphone:', error);
-      alert('Impossible d\'accéder au microphone. Vérifiez les permissions.');
-    }
-  };
-
-  // Fonction pour arrêter et transcrire dans l'input seulement
-  const stopRecordingOnly = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      // Créer une Promise pour attendre que le MediaRecorder soit vraiment arrêté
-      return new Promise((resolve) => {
-        const recorder = mediaRecorderRef.current;
-
-        recorder.onstop = async () => {
-          // Fermer les ressources audio
-          const stream = recorder.stream;
-          stream.getTracks().forEach(track => track.stop());
-          if (animationFrameRef.current) {
-            cancelAnimationFrame(animationFrameRef.current);
-          }
-          if (audioContextRef.current) {
-            audioContextRef.current.close();
-          }
-
-          setIsRecording(false);
-          setAudioLevel(0);
-
-          // Attendre un petit délai pour s'assurer que tous les chunks sont arrivés
-          await new Promise(wait => setTimeout(wait, 200));
-
-          // Vérifier s'il y a vraiment du son enregistré
-          if (audioChunksRef.current.length === 0) {
-            console.log('⚠️ Aucun audio enregistré');
-            resolve();
-            return;
-          }
-
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-
-          // Vérifier la taille du blob (minimum 1KB)
-          if (audioBlob.size < 1000) {
-            console.log('⚠️ Audio trop court:', audioBlob.size, 'bytes');
-            audioChunksRef.current = [];
-            resolve();
-            return;
-          }
-
-          console.log('📦 Taille blob audio:', Math.round(audioBlob.size / 1024) + 'KB');
-
-          try {
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-              setIsTranscribing(true);
-              setInputValue('🎤 Transcription...');
-
-              try {
-                const response = await fetch('/.netlify/functions/chat', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    message: '',
-                    audioData: reader.result.split(',')[1],
-                    userProfile: userProfile || 'indefini',
-                    sessionId: sessionId,
-                    timestamp: new Date().toISOString()
-                  })
-                });
-
-                const data = await response.json();
-                setIsTranscribing(false);
-
-                if (data.transcribedText && data.transcribedText.trim()) {
-                  setInputValue(data.transcribedText);
-                } else {
-                  setInputValue('');
-                  console.log('⚠️ Pas de transcription reçue ou vide');
-                }
-              } catch (error) {
-                console.error('Erreur transcription:', error);
-                setIsTranscribing(false);
-                setInputValue('');
-              }
-
-              audioChunksRef.current = [];
-              resolve();
-            };
-            reader.readAsDataURL(audioBlob);
-          } catch (error) {
-            console.error('Erreur lecture audio:', error);
-            setIsTranscribing(false);
-            setInputValue('');
-            audioChunksRef.current = [];
-            resolve();
-          }
-        };
-
-        // Déclencher l'arrêt
-        recorder.stop();
-      });
-    }
-  };
-
-  // Fonction pour arrêter, transcrire et envoyer directement
-  const sendRecordingDirectly = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setAudioLevel(0);
-
-      setTimeout(async () => {
-        // Vérifier s'il y a vraiment du son enregistré
-        if (audioChunksRef.current.length === 0) {
-          console.log('⚠️ Aucun audio enregistré');
-          return;
-        }
-
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-
-        // Vérifier la taille du blob
-        if (audioBlob.size < 1000) {
-          console.log('⚠️ Audio trop court ou vide');
-          audioChunksRef.current = [];
-          return;
-        }
-
-        console.log('📦 Envoi direct - Taille blob:', Math.round(audioBlob.size / 1024) + 'KB');
-
-        setIsTranscribing(true);
-        setInputValue('🎤 Transcription...');
-
-        try {
-          const audioData = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result.split(',')[1]);
-            reader.readAsDataURL(audioBlob);
-          });
-
-          const response = await fetch('/.netlify/functions/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: '',
-              audioData: audioData,
-              userProfile: userProfile || 'indefini',
-              sessionId: sessionId || null,
-              timestamp: new Date().toISOString()
-            })
-          });
-
-          const data = await response.json();
-
-          // Mettre à jour l'input avec la transcription
-          if (data.transcribedText) {
-            setInputValue(data.transcribedText);
-          }
-
-          setIsTranscribing(false);
-
-          // Maintenant envoyer le message transcrit
-          if (data.transcribedText) {
-            // Ajouter le message utilisateur avec la transcription
-            setMessages(prev => [...prev, {
-              type: 'user',
-              content: data.transcribedText,
-              isVocal: true
-            }]);
-
-            setInputValue('');
-            setIsLoading(true);
-
-            if (data.sessionId && !sessionId) setSessionId(data.sessionId);
-
-            setMessages(prev => [...prev, {
-              type: 'bot',
-              content: data.message || "Désolé, je n'ai pas de réponse.",
-              results: Array.isArray(data.results) ? data.results : [],
-              showCalendly: data.showCalendly === true
-            }]);
-
-            setIsLoading(false);
-          }
-
-          audioChunksRef.current = [];
-        } catch (error) {
-          console.error('Erreur:', error);
-          setIsTranscribing(false);
-          setInputValue('');
-          audioChunksRef.current = [];
-
-          setMessages(prev => [...prev, {
-            type: 'bot',
-            content: "Problème technique. Pouvez-vous réessayer ?",
-            results: [],
-            showCalendly: true
-          }]);
-        }
-      }, 100);
-    }
-  };
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 📤 ENVOI DE MESSAGE
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   const handleSendMessage = async () => {
-    const hasTextToSend = inputValue.trim().length > 0;
-
-    if (!hasTextToSend || isLoading || isTranscribing) {
-      console.log('❌ Rien à envoyer ou déjà en cours');
-      return;
-    }
-
-    const startTime = performance.now();
     const userMessage = inputValue.trim();
+    if (!userMessage || busy) return;
 
     setInputValue('');
-
-    setMessages(prev => [...prev, {
-      type: 'user',
-      content: userMessage,
-      isVocal: false
-    }]);
-
+    pushMessages({ type: 'user', content: userMessage });
     setIsLoading(true);
 
     try {
-      // 🚀 VÉRIFIER LE CACHE
       const cached = getCachedResponse(userMessage, userProfile || 'indefini');
       if (cached) {
-        const cacheTime = performance.now() - startTime;
-        console.log(`⚡ Cache hit: ${cacheTime.toFixed(0)}ms`);
-
-        setMessages(prev => [...prev, {
-          type: 'bot',
-          content: cached.message,
-          results: cached.results || [],
-          showCalendly: cached.showCalendly || false
-        }]);
-
-        setIsLoading(false);
+        pushMessages(botReply(cached));
         return;
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 28000);
-
-      console.log('🌐 Envoi vers backend');
-
-      const response = await fetch('/.netlify/functions/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          message: userMessage,
-          audioData: null,
-          userProfile: userProfile || 'indefini',
-          sessionId: sessionId || null,
-          timestamp: new Date().toISOString()
-        }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error('HTTP ' + response.status);
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+      let response;
+      try {
+        response = await requestChat({ message: userMessage, audioData: null }, controller.signal);
+      } finally {
+        clearTimeout(timeoutId);
       }
+
+      if (!response.ok) throw new Error('HTTP ' + response.status);
 
       const data = await response.json();
-      const totalTime = performance.now() - startTime;
+      if (data.sessionId && !sessionId) setSessionId(data.sessionId);
 
-      console.log(`✅ Réponse reçue: ${totalTime.toFixed(0)}ms`, data);
-
-      if (data.sessionId && !sessionId) {
-        setSessionId(data.sessionId);
-      }
-
-      // 💾 METTRE EN CACHE
       if (data.results && data.results.length > 0) {
         setCachedResponse(userMessage, userProfile || 'indefini', {
           message: data.message,
@@ -416,1059 +373,516 @@ const HormurWidget = ({ isEmbed = false, bottomOffset = 20 }) => {
         });
       }
 
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        content: data.message || "Désolé, je n'ai pas de réponse.",
-        results: Array.isArray(data.results) ? data.results : [],
-        showCalendly: data.showCalendly === true
-      }]);
-
+      pushMessages(botReply(data));
     } catch (error) {
-      console.error('❌ Erreur:', error);
-
-      const errorMessage = error.name === 'AbortError'
-        ? "La requête a pris trop de temps. Réessayez avec une question plus simple"
-        : "Problème technique. Pouvez-vous réessayer ?";
-
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        content: errorMessage,
-        results: [],
-        showCalendly: true
-      }]);
+      pushMessages(botError(error.name === 'AbortError'
+        ? 'La recherche a pris trop de temps. Pouvez-vous réessayer avec une demande plus courte ?'
+        : "La recherche n'a pas abouti. Pouvez-vous réessayer ?"));
     } finally {
       setIsLoading(false);
     }
   };
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 🎯 AUTRES HANDLERS
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const handleChoice = (choice) => {
+    setUserProfile(choice.profile);
+    pushMessages(
+      { type: 'user', content: choice.said },
+      { type: 'bot', content: choice.reply }
+    );
+    if (!isCoarsePointer() && inputRef.current) inputRef.current.focus();
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  useEffect(() => {
-    if (isOpen && messages.length === 0) {
-      setTimeout(() => {
-        setMessages([{
-          type: 'bot',
-          content: "Bonjour ! Je suis l'assistant Hormur. Vous cherchez un artiste, un lieu ou un événement ?",
-          showProfileButtons: true
-        }]);
-      }, 300);
-    }
-  }, [isOpen, messages.length]);
-
-  // Notifier le parent (iframe) de l'état ouvert/fermé
-  useEffect(() => {
-    if (isEmbed && window.parent !== window) {
-      window.parent.postMessage({
-        type: 'HORMUR_WIDGET_STATE',
-        isOpen: isOpen
-      }, '*');
-    }
-  }, [isOpen, isEmbed]);
-
-  // Écouter les commandes d'ouverture/fermeture envoyées par le parent (mode embed)
-  useEffect(() => {
-    if (!isEmbed) return;
-
-    const handleParentCommand = (event) => {
-      if (!event.data?.type) return;
-      if (event.data.type === 'HORMUR_WIDGET_OPEN') setIsOpen(true);
-      if (event.data.type === 'HORMUR_WIDGET_CLOSE') setIsOpen(false);
-    };
-
-    window.addEventListener('message', handleParentCommand);
-    return () => window.removeEventListener('message', handleParentCommand);
-  }, [isEmbed]);
-
-
-  // Détecter les changements de hauteur du viewport (barre Chrome qui apparaît/disparaît)
-  useEffect(() => {
-    const BOTTOM_SAFE_MARGIN = 80; // Marge de sécurité pour la barre de navigation mobile
-
-    const updateViewportHeight = () => {
-      let rawHeight;
-
-      // Utiliser visualViewport si disponible (meilleur pour mobile)
-      if (window.visualViewport) {
-        rawHeight = window.visualViewport.height;
-      } else {
-        rawHeight = window.innerHeight;
-      }
-
-      // Soustraire une marge de sécurité pour s'assurer que le champ reste visible
-      // au-dessus de la barre de navigation mobile
-      const safeHeight = rawHeight - BOTTOM_SAFE_MARGIN;
-      setViewportHeight(safeHeight);
-    };
-
-    // Mettre à jour immédiatement
-    updateViewportHeight();
-
-    // Écouter les changements de viewport
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', updateViewportHeight);
-      window.visualViewport.addEventListener('scroll', updateViewportHeight);
-    }
-
-    // Fallback pour les anciens navigateurs
-    window.addEventListener('resize', updateViewportHeight);
-
-    return () => {
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', updateViewportHeight);
-        window.visualViewport.removeEventListener('scroll', updateViewportHeight);
-      }
-      window.removeEventListener('resize', updateViewportHeight);
-    };
-  }, []);
-
-  const handleProfileSelect = (profile) => {
-    setUserProfile(profile);
-    const profileMessages = {
-      spectateur: "Super ! Quelle ville vous intéresse, et pour quand ?",
-      artiste: "Génial ! Quelle est votre ville et quel type de lieu pour votre art ? (appartement, jardin...)",
-      hote: "Parfait ! Quelle est votre ville et quel type d'artiste recherchez-vous ? (musique, théâtre...)"
-    };
-
-    setMessages(prev => [...prev, {
-      type: 'bot',
-      content: profileMessages[profile],
-      profile: profile
-    }]);
+  const handleReset = () => {
+    if (isRecording) cancelRecording();
+    clearConversation();
+    setMessages([]);
+    setUserProfile(null);
+    setSessionId(null);
+    setInputValue('');
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  const extractYouTubeId = (url) => {
-    if (!url) return null;
-    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[7].length === 11) ? match[7] : null;
+  // ───── Voix ─────
+
+  const releaseAudio = (recorder) => {
+    try {
+      if (recorder && recorder.stream) recorder.stream.getTracks().forEach((track) => track.stop());
+    } catch (e) { /* flux déjà fermé */ }
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    animationFrameRef.current = null;
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch (e) { /* déjà fermé */ }
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
   };
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 🔗 RENDU DES MESSAGES AVEC LIENS CLIQUABLES
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const analyzeAudio = () => {
+    if (!analyserRef.current) return;
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+    const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+    setAudioLevel(Math.min(100, average / 1.28));
+    animationFrameRef.current = requestAnimationFrame(analyzeAudio);
+  };
 
-  const renderMessageContent = (content) => {
-    if (!content) return null;
+  const startRecording = async () => {
+    if (busy || isRecording) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setInputValue('');
 
-    // Regex pour détecter les liens markdown [texte](url)
-    const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+      // Niveau sonore pour l'animation ; l'enregistrement fonctionne sans.
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioContextRef.current = new AudioContextClass();
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        audioContextRef.current.createMediaStreamSource(stream).connect(analyserRef.current);
+        analyserRef.current.fftSize = 256;
+        analyzeAudio();
+      } catch (e) { /* pas d'animation du niveau sonore */ }
 
-    // Vérifier s'il y a des liens markdown
-    if (!markdownLinkRegex.test(content)) {
-      return (
-        <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: 0, whiteSpace: 'pre-line' }}>
-          {content}
-        </p>
-      );
+      const mimeType = pickAudioMime();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => releaseAudio(recorder);
+      recorder.start(100);
+      setIsRecording(true);
+    } catch (error) {
+      pushMessages({
+        type: 'bot',
+        content: "Le micro n'est pas accessible. Autorisez-le dans votre navigateur, ou écrivez votre message."
+      });
     }
+  };
 
-    // Reset regex lastIndex après test()
-    markdownLinkRegex.lastIndex = 0;
+  const cancelRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = () => releaseAudio(recorder);
+      try { recorder.stop(); } catch (e) { releaseAudio(recorder); }
+    }
+    audioChunksRef.current = [];
+    setIsRecording(false);
+    setAudioLevel(0);
+  };
 
-    // Séparer le texte et les liens
-    const parts = [];
-    let lastIndex = 0;
-    let match;
+  // Fin de l'enregistrement. sendAfter=false : le texte reconnu est posé dans
+  // le champ pour relecture. sendAfter=true : il est envoyé directement.
+  const finishRecording = (sendAfter) => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || !isRecording) return;
 
-    while ((match = markdownLinkRegex.exec(content)) !== null) {
-      // Texte avant le lien
-      if (match.index > lastIndex) {
-        const textBefore = content.slice(lastIndex, match.index);
-        if (textBefore.trim()) {
-          parts.push({ type: 'text', value: textBefore });
+    recorder.onstop = async () => {
+      const mimeType = recorder.mimeType || pickAudioMime() || 'audio/webm';
+      releaseAudio(recorder);
+      setIsRecording(false);
+      setAudioLevel(0);
+
+      // Laisse arriver les derniers morceaux
+      await wait(200);
+      const chunks = audioChunksRef.current;
+      audioChunksRef.current = [];
+      if (chunks.length === 0) return;
+
+      const audioBlob = new Blob(chunks, { type: mimeType });
+      if (audioBlob.size < 1000) return;
+
+      setIsTranscribing(true);
+      try {
+        const audioData = await blobToBase64(audioBlob);
+        const response = await requestChat({
+          message: '',
+          audioData,
+          audioMime: mimeType,
+          transcribeOnly: !sendAfter
+        });
+        const data = await response.json();
+        const text = (data.transcribedText || '').trim();
+
+        if (!text) {
+          pushMessages({
+            type: 'bot',
+            content: data.message || "Je n'ai pas compris l'enregistrement. Pouvez-vous réessayer, ou écrire votre message ?"
+          });
+          return;
         }
+
+        if (!sendAfter) {
+          setInputValue(text);
+          if (inputRef.current) inputRef.current.focus();
+          return;
+        }
+
+        if (data.sessionId && !sessionId) setSessionId(data.sessionId);
+        pushMessages({ type: 'user', content: text, isVocal: true }, botReply(data));
+      } catch (error) {
+        pushMessages(botError("L'enregistrement n'a pas pu être envoyé. Pouvez-vous réessayer, ou écrire votre message ?"));
+      } finally {
+        setIsTranscribing(false);
       }
-      // Le lien lui-même
-      parts.push({ type: 'link', label: match[1], url: match[2] });
-      lastIndex = match.index + match[0].length;
-    }
+    };
 
-    // Texte restant après le dernier lien
-    if (lastIndex < content.length) {
-      const remaining = content.slice(lastIndex);
-      if (remaining.trim()) {
-        parts.push({ type: 'text', value: remaining });
+    try {
+      recorder.stop();
+    } catch (e) {
+      cancelRecording();
+    }
+  };
+
+  // ───── Effets ─────
+
+  // Message d'accueil
+  useEffect(() => {
+    if (isOpen && messages.length === 0) {
+      setMessages([{ type: 'bot', content: WELCOME, showProfileButtons: true }]);
+    }
+  }, [isOpen, messages.length]);
+
+  // Mémoire de la conversation pendant la visite
+  useEffect(() => {
+    if (!hasConversation) return;
+    saveConversation({
+      messages: messages.slice(-MAX_SAVED_MESSAGES),
+      userProfile,
+      sessionId
+    });
+  }, [messages, userProfile, sessionId, hasConversation]);
+
+  // Défilement : une réponse se lit depuis son début (sa phrase puis ses
+  // résultats) ; pour le reste, le dernier message reste visible.
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!isLoading && last && last.type === 'bot' && lastBotRef.current && messages.length > 1) {
+      lastBotRef.current.scrollIntoView({ block: 'start' });
+    } else if (threadEndRef.current) {
+      threadEndRef.current.scrollIntoView({ block: 'end' });
+    }
+  }, [messages, isLoading, isOpen]);
+
+  // Texte d'attente qui évolue pendant une recherche longue
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingStep(0);
+      // Le champ, désactivé pendant la recherche, reprend la main au clavier
+      if (isOpen && !isCoarsePointer() && inputRef.current) inputRef.current.focus();
+      return undefined;
+    }
+    const first = setTimeout(() => setLoadingStep(1), 4000);
+    const second = setTimeout(() => setLoadingStep(2), 13000);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(second);
+    };
+  }, [isLoading, isOpen]);
+
+  // Notifier le parent (iframe) de l'état ouvert/fermé
+  useEffect(() => {
+    if (isEmbed && window.parent !== window) {
+      window.parent.postMessage({ type: 'HORMUR_WIDGET_STATE', isOpen }, '*');
+    }
+  }, [isOpen, isEmbed]);
+
+  // Commandes d'ouverture/fermeture envoyées par le parent (mode embed)
+  useEffect(() => {
+    if (!isEmbed) return undefined;
+    const handleParentCommand = (event) => {
+      if (!event.data || !event.data.type) return;
+      if (event.data.type === 'HORMUR_WIDGET_OPEN') setIsOpen(true);
+      if (event.data.type === 'HORMUR_WIDGET_CLOSE') setIsOpen(false);
+    };
+    window.addEventListener('message', handleParentCommand);
+    return () => window.removeEventListener('message', handleParentCommand);
+  }, [isEmbed]);
+
+  // Échap ferme le widget ; à l'ouverture sur ordinateur, le champ est prêt
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    if (!isCoarsePointer() && inputRef.current) inputRef.current.focus();
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen]);
+
+  // Taille visible de la fenêtre (barre du navigateur, clavier)
+  useEffect(() => {
+    const update = () => {
+      const vv = window.visualViewport;
+      setViewport({
+        width: window.innerWidth,
+        height: Math.round(vv ? vv.height : window.innerHeight)
+      });
+    };
+    update();
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', update);
+      window.visualViewport.addEventListener('scroll', update);
+    }
+    window.addEventListener('resize', update);
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', update);
+        window.visualViewport.removeEventListener('scroll', update);
       }
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+
+  // Micro libéré si le widget est retiré en cours d'enregistrement
+  useEffect(() => () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null;
+      try { recorder.stop(); } catch (e) { /* déjà arrêté */ }
     }
+    releaseAudio(recorder);
+  }, []);
 
-    return (
-      <div>
-        {parts.map((part, i) => {
-          if (part.type === 'text') {
-            return (
-              <p key={i} style={{ fontSize: '14px', lineHeight: '1.6', color: '#323242', margin: '0 0 4px 0', whiteSpace: 'pre-line' }}>
-                {part.value.trim()}
-              </p>
-            );
-          }
-          if (part.type === 'link') {
-            return (
-              <a
-                key={i}
-                href={part.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginTop: '8px',
-                  marginBottom: '4px',
-                  padding: '10px 18px',
-                  borderRadius: '9999px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  textDecoration: 'none',
-                  transition: 'all 0.3s',
-                  background: 'linear-gradient(to right, #ef4444, #f97316)',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(238,101,83,0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '0.9';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(238,101,83,0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 6px rgba(238,101,83,0.3)';
-                }}
-              >
-                {part.label}
-                <span style={{ fontSize: '16px' }}>→</span>
-              </a>
-            );
-          }
-          return null;
-        })}
-      </div>
-    );
-  };
+  // ───── Cadre du panneau ─────
+  // v=2 (site hôte récent) : le site gère le cadre, le widget remplit l'iframe.
+  // Ancienne intégration : même chose sur ordinateur ; sur téléphone, une
+  // marge basse garde la saisie au-dessus de la barre du navigateur.
+  // Page de démonstration : panneau flottant, plein écran sur téléphone.
 
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 🎨 COMPOSANTS
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const narrow = viewport.width <= 768;
+  let panelClass = 'hw-panel';
+  let panelStyle;
 
-  const ResultCard = ({ result }) => {
-    const youtubeId = extractYouTubeId(result.video_url);
+  if (isEmbed) {
+    if (!hostManaged && narrow && isCoarsePointer()) {
+      const height = Math.max(240, viewport.height - LEGACY_BOTTOM_MARGIN);
+      panelClass += ' hw-panel--phone';
+      panelStyle = { height: `${height}px` };
+    } else {
+      panelClass += ' hw-panel--fill';
+    }
+  } else if (narrow) {
+    panelClass += ' hw-panel--phone';
+    panelStyle = { height: `${viewport.height}px` };
+  } else {
+    panelClass += ' hw-panel--float';
+    panelStyle = { right: '20px', bottom: `${bottomOffset}px` };
+  }
 
-    return (
-      <div style={{
-        backgroundColor: 'white',
-        borderRadius: '16px',
-        padding: '0',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        border: '1px solid #DFDFE9',
-        marginBottom: '12px',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        cursor: 'pointer',
-        width: '100%'
-      }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.15)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-        }}>
+  // L'exemple guide la première demande ; ensuite le champ redevient neutre.
+  const typedMessages = messages.filter((m) => m.type === 'user').length - (activeChoice ? 1 : 0);
+  let placeholder = 'Décrivez ce que vous cherchez';
+  if (isLoading) placeholder = 'Recherche en cours';
+  else if (typedMessages > 0) placeholder = 'Précisez votre recherche';
+  else if (activeChoice) placeholder = activeChoice.placeholder;
 
-        {youtubeId ? (
-          <div style={{
-            width: '100%',
-            paddingBottom: '56.25%',
-            position: 'relative',
-            backgroundColor: '#000',
-            borderTopLeftRadius: '16px',
-            borderTopRightRadius: '16px',
-            overflow: 'hidden'
-          }}>
-            <iframe
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                border: 'none'
-              }}
-              src={'https://www.youtube.com/embed/' + youtubeId}
-              title="Vidéo de présentation"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-        ) : result.image_url ? (
-          <img
-            src={result.image_url}
-            alt={result.title}
-            style={{
-              width: '100%',
-              height: '180px',
-              objectFit: 'cover',
-              borderTopLeftRadius: '16px',
-              borderTopRightRadius: '16px'
-            }}
-            onError={(e) => {
-              e.target.style.display = 'none';
-            }}
-          />
-        ) : (
-          <div style={{
-            width: '100%',
-            height: '180px',
-            background: 'linear-gradient(135deg, #FCE5DD 0%, #F8DDD2 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '48px',
-            borderTopLeftRadius: '16px',
-            borderTopRightRadius: '16px'
-          }}>
-            {result.type === 'artiste' ? '🎨' : result.type === 'lieu' ? '🏡' : '✨'}
-          </div>
-        )}
-
-        <div style={{ padding: '16px' }}>
-          <h4 style={{
-            fontFamily: 'Georgia, serif',
-            fontWeight: 'bold',
-            fontSize: '17px',
-            color: '#323242',
-            marginBottom: '10px',
-            lineHeight: '1.3',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden'
-          }}>
-            {result.title || 'Sans titre'}
-          </h4>
-
-          {(result.city || result.date) && (
-            <p style={{ fontSize: '14px', color: '#5E5E8F', margin: '0 0 8px 0', fontWeight: '500' }}>
-              {result.city}{result.city && result.date ? ' • ' : ''}{result.date}
-            </p>
-          )}
-
-          {result.genre && (
-            <p style={{
-              fontSize: '13px',
-              color: '#7E7EA5',
-              marginTop: '6px',
-              marginBottom: '10px'
-            }}>
-              {result.genre}
-            </p>
-          )}
-
-          {result.visualPrice && (
-            <p style={{
-              fontSize: '14px',
-              color: '#EE7951',
-              marginTop: '10px',
-              marginBottom: '14px',
-              fontWeight: '600'
-            }}>
-              {result.visualPrice}
-            </p>
-          )}
-
-          {result.url && (
-            <a
-              href={result.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'block',
-                width: '100%',
-                marginTop: '14px',
-                background: 'linear-gradient(to right, #ef4444, #f97316)',
-                color: 'white',
-                padding: '12px 20px',
-                borderRadius: '9999px',
-                fontSize: '14px',
-                fontWeight: '600',
-                border: 'none',
-                cursor: 'pointer',
-                textAlign: 'center',
-                textDecoration: 'none',
-                transition: 'all 0.3s',
-                boxSizing: 'border-box'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.opacity = '0.9';
-                e.currentTarget.style.transform = 'scale(1.02)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = '1';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              Voir les détails
-            </a>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const CalendlyButtons = ({ profile }) => {
-    const buttons = profile === 'artiste'
-      ? [{ label: 'Discuter avec Éléonore', url: 'https://calendly.com/eleonore-hormur/15min' }]
-      : [{ label: 'Échanger avec Martin', url: 'https://calendly.com/martin-jeudy/15min' }];
-
-    return (
-      <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {buttons.map((btn, idx) => (
-          <a
-            key={idx}
-            href={btn.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'block',
-              textAlign: 'center',
-              padding: '10px 16px',
-              borderRadius: '9999px',
-              fontSize: '14px',
-              fontWeight: '500',
-              transition: 'all 0.3s',
-              textDecoration: 'none',
-              border: '2px solid #EE6553',
-              color: '#EE6553',
-              backgroundColor: 'transparent'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#EE6553';
-              e.currentTarget.style.color = 'white';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-              e.currentTarget.style.color = '#EE6553';
-            }}
-          >
-            {btn.label}
-          </a>
-        ))}
-      </div>
-    );
-  };
-
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
-
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  // 🎨 RENDER
-  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const loadingText = ['', 'Recherche en cours', 'Encore quelques secondes'][loadingStep];
 
   return (
-    <>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% {
-            transform: scale3d(1, 1, 1);
-          }
-          50% {
-            transform: scale3d(1.05, 1.05, 1);
-          }
-        }
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translate3d(0, 20px, 0) scale3d(0.95, 0.95, 1);
-          }
-          to {
-            opacity: 1;
-            transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
-          }
-        }
-        @keyframes bounce {
-          0%, 100% { transform: translate3d(0, 0, 0); }
-          50% { transform: translate3d(0, -5px, 0); }
-        }
-        @keyframes wave {
-          0%, 100% { transform: scaleY(0.5); }
-          50% { transform: scaleY(1); }
-        }
-        .hormur-scrollbar::-webkit-scrollbar { width: 6px; }
-        .hormur-scrollbar::-webkit-scrollbar-track {
-          background: #F8DDD2;
-          border-radius: 10px;
-        }
-        .hormur-scrollbar::-webkit-scrollbar-thumb {
-          background: #EE6553;
-          border-radius: 10px;
-        }
-        .hormur-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #EE7951;
-        }
-        .hormur-floating-btn {
-          animation: pulse 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-          backface-visibility: hidden;
-          -webkit-backface-visibility: hidden;
-          -moz-backface-visibility: hidden;
-          transform-style: preserve-3d;
-          -webkit-transform-style: preserve-3d;
-        }
-        .hormur-modal {
-          animation: slideUp 0.3s ease-out;
-        }
-        .audio-bar { animation: wave 0.5s ease-in-out infinite; }
-      `}</style>
+    <div className="hw-root">
+      <style>{styles}</style>
 
-      <div style={{ position: 'fixed', zIndex: 9999, fontFamily: 'system-ui, -apple-system, sans-serif', background: 'transparent', backgroundColor: 'transparent' }}>
-        {/* Le FAB interne est masqué en mode embed : c'est le site parent qui déclenche l'ouverture via postMessage */}
-        {!isEmbed && (
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="hormur-floating-btn"
-            style={{
-              position: 'fixed',
-              bottom: `${bottomOffset}px`,
-              right: '20px',
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.3s',
-              background: 'linear-gradient(135deg, #EE6553 0%, #EE7951 100%)',
-              border: 'none',
-              cursor: 'pointer',
-              transform: isOpen ? 'scale(0)' : 'scale(1)',
-              opacity: isOpen ? 0 : 1
-            }}
-            aria-label="Ouvrir l'assistant Hormur"
-          >
-            <MessageCircle color="white" size={28} />
-          </button>
-        )}
+      {/* Bouton flottant : page de démonstration seulement. En mode embed,
+          c'est le site hôte qui ouvre le widget. */}
+      {!isEmbed && !isOpen && (
+        <button
+          type="button"
+          className="hw-fab"
+          style={{ bottom: `${bottomOffset}px` }}
+          onClick={() => setIsOpen(true)}
+          aria-label="Ouvrir la recherche IA"
+        >
+          <MessageCircle size={26} aria-hidden="true" />
+        </button>
+      )}
 
-        {isOpen && (
-          <>
-            {/* Backdrop : masqué en mode embed car l'iframe a une taille limitée */}
-            {!isEmbed && (
-              <div
-                style={{
-                  position: 'fixed',
-                  inset: 0,
-                  backgroundColor: 'rgba(0,0,0,0.3)',
-                  backdropFilter: 'blur(4px)',
-                  transition: 'opacity 0.3s',
-                  zIndex: 9998
-                }}
-                onClick={() => setIsOpen(false)}
-              />
-            )}
+      {isOpen && (
+        <>
+          {!isEmbed && <div className="hw-backdrop" onClick={() => setIsOpen(false)} />}
 
-            <div
-              className={`hormur-modal ${isMobile ? 'hormur-modal-mobile' : ''}`}
-              style={{
-                position: 'fixed',
-                ...(isMobile ? {
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  width: '100%',
-                  height: `${viewportHeight}px`, // Hauteur dynamique qui s'adapte à la barre Chrome
-                  maxHeight: `${viewportHeight}px`,
-                  borderRadius: '0'
-                } : {
-                  bottom: isEmbed ? '0' : `${bottomOffset}px`,
-                  right: isEmbed ? '0' : '20px',
-                  width: isEmbed ? '100%' : 'min(420px, 90vw)',
-                  height: isEmbed ? '100%' : 'min(600px, 85vh)',
-                  borderRadius: isEmbed ? '24px' : '24px'
-                }),
-                background: 'white',
-                transform: 'translateZ(0)',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-                display: 'flex',
-                flexDirection: 'column',
-                transition: 'height 0.2s ease-out', // Transition douce pour les changements de hauteur
-                zIndex: 9999,
-                overflow: 'hidden'
-              }}
-            >
-              {/* Header */}
-              <div style={{
-                flexShrink: 0,
-                flexGrow: 0,
-                padding: isMobile ? '12px 16px' : '16px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                borderBottom: '1px solid #DFDFE9',
-                backgroundColor: '#FEF6F4',
-                position: 'relative',
-                top: 0,
-                zIndex: 10,
-                minHeight: 'auto'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    overflow: 'hidden'
-                  }}>
-                    <img
-                      src="/icone logo hormur.svg"
-                      alt="Logo Hormur"
-                      style={{
-                        width: '42px',
-                        height: '42px',
-                        display: 'block',
-                        objectFit: 'cover'
-                      }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.parentElement.style.backgroundColor = '#EE6553';
-                        e.target.parentElement.innerHTML = '<svg width="42" height="42" viewBox="0 0 100 100" fill="white"><path d="M20,20 L20,80 L35,80 L35,55 L50,65 L50,80 L65,80 L65,20 L50,20 L50,45 L35,35 L35,20 Z" /><circle cx="80" cy="50" r="15" fill="white" /><circle cx="80" cy="50" r="8" fill="#EE6553" /></svg>';
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <h3 style={{ fontFamily: 'Georgia, serif', fontWeight: 'bold', fontSize: '17px', color: '#323242', margin: 0 }}>
-                      Hormur
-                    </h3>
-                    <p style={{ fontSize: '12px', opacity: 0.7, color: '#323242', margin: 0 }}>
-                      L'art où on ne l'attend pas
-                    </p>
-                  </div>
-                </div>
+          <div className={panelClass} style={panelStyle} role="dialog" aria-label="Recherche IA Hormur">
+            <header className="hw-header">
+              <div className="hw-logo">
+                <img
+                  src="/icone logo hormur.svg"
+                  alt=""
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              </div>
+              <div className="hw-titles">
+                <h3 className="hw-title">Recherche IA</h3>
+                <p className="hw-subtitle">Artistes, lieux et événements</p>
+              </div>
+              {hasConversation && (
                 <button
-                  onClick={() => setIsOpen(false)}
-                  style={{
-                    padding: '8px',
-                    borderRadius: '50%',
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s',
-                    flexShrink: 0
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FCE5DD'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  aria-label="Fermer"
+                  type="button"
+                  className="hw-icon-btn"
+                  onClick={handleReset}
+                  aria-label="Nouvelle recherche"
+                  title="Nouvelle recherche"
                 >
-                  <X size={22} color="#323242" />
+                  <RotateCcw size={19} aria-hidden="true" />
                 </button>
-              </div>
+              )}
+              <button
+                type="button"
+                className="hw-icon-btn"
+                onClick={() => setIsOpen(false)}
+                aria-label="Fermer"
+                title="Fermer"
+              >
+                <X size={22} aria-hidden="true" />
+              </button>
+            </header>
 
-              {/* Messages */}
-              <div className="hormur-scrollbar" style={{
-                flex: '1 1 0',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                padding: '20px',
-                backgroundColor: '#FFFFFF',
-                WebkitOverflowScrolling: 'touch',
-                minHeight: 0, // CRUCIAL pour flexbox, permet au conteneur de rétrécir
-                maxHeight: '100%' // Ne jamais dépasser 100% de l'espace disponible
-              }}>
-                {messages.map((message, idx) => (
-                  <div key={idx} style={{ marginBottom: '16px' }}>
-                    {message.type === 'bot' ? (
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                        <div style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: '#FCE0DD',
-                          flexShrink: 0,
-                          marginTop: '2px'
-                        }}>
-                          <Sparkles size={16} color="#EE6553" />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%' }}>
-                          <div style={{
-                            background: '#FCE5DD',
-                            borderRadius: '16px',
-                            borderTopLeftRadius: '4px',
-                            padding: '14px 16px',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                            wordWrap: 'break-word',
-                            overflowWrap: 'break-word'
-                          }}>
-                            {renderMessageContent(message.content)}
-                          </div>
-
-                          {message.showProfileButtons && !userProfile && (
-                            <div style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(3, 1fr)',
-                              gap: '8px',
-                              marginTop: '12px',
-                              maxWidth: '380px'
-                            }}>
-                              <button
-                                onClick={() => handleProfileSelect('hote')}
-                                style={{
-                                  backgroundColor: 'white',
-                                  border: '2px solid #F5AF97',
-                                  borderRadius: '12px',
-                                  padding: '14px 8px',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.3s',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(-2px)';
-                                  e.currentTarget.style.borderColor = '#EE7951';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                  e.currentTarget.style.borderColor = '#F5AF97';
-                                }}
-                              >
-                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎵</div>
-                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Artistes</div>
-                              </button>
-                              <button
-                                onClick={() => handleProfileSelect('artiste')}
-                                style={{
-                                  backgroundColor: 'white',
-                                  border: '2px solid #F5A398',
-                                  borderRadius: '12px',
-                                  padding: '14px 8px',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.3s',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(-2px)';
-                                  e.currentTarget.style.borderColor = '#F18475';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                  e.currentTarget.style.borderColor = '#F5A398';
-                                }}
-                              >
-                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🏡</div>
-                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Lieux</div>
-                              </button>
-                              <button
-                                onClick={() => handleProfileSelect('spectateur')}
-                                style={{
-                                  backgroundColor: 'white',
-                                  border: '2px solid #F5C497',
-                                  borderRadius: '12px',
-                                  padding: '14px 8px',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.3s',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(-2px)';
-                                  e.currentTarget.style.borderColor = '#EEB653';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'translateY(0)';
-                                  e.currentTarget.style.borderColor = '#F5C497';
-                                }}
-                              >
-                                <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎟️</div>
-                                <div style={{ fontSize: '12px', fontWeight: '600', color: '#323242' }}>Événements</div>
-                              </button>
-                            </div>
-                          )}
-
-                          {message.results && message.results.length > 0 && (
-                            <div style={{ marginTop: '16px', width: '100%' }}>
-                              {message.results.map((result, ridx) => (
-                                <ResultCard key={ridx} result={result} />
-                              ))}
-                            </div>
-                          )}
-
-                          {message.showCalendly && (
-                            <CalendlyButtons profile={userProfile} />
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <div style={{
-                          background: '#7E7EA5',
-                          color: 'white',
-                          borderRadius: '16px',
-                          borderTopRightRadius: '4px',
-                          padding: '14px 16px',
-                          maxWidth: '80%',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                          wordWrap: 'break-word',
-                          overflowWrap: 'break-word'
-                        }}>
-                          <p style={{ fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
-                            {message.content}
-                          </p>
-                        </div>
-                      </div>
-                    )}
+            <div className="hw-thread" role="log" aria-live="polite">
+              {messages.map((message, idx) => (message.type === 'bot' ? (
+                <div
+                  key={idx}
+                  className="hw-row hw-row--bot"
+                  ref={idx === messages.length - 1 ? lastBotRef : null}
+                >
+                  <div className="hw-bubble hw-bubble--bot">
+                    <MessageContent content={message.content} />
                   </div>
-                ))}
 
-                {isLoading && (
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: '#FCE0DD',
-                      flexShrink: 0
-                    }}>
-                      <Sparkles size={16} color="#EE6553" />
-                    </div>
-                    <div style={{
-                      background: '#FCE5DD',
-                      borderRadius: '16px',
-                      borderTopLeftRadius: '4px',
-                      padding: '16px',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-                    }}>
-                      <div style={{ display: 'flex', gap: '5px' }}>
-                        <div style={{ width: '8px', height: '8px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite' }} />
-                        <div style={{ width: '8px', height: '8px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite 0.15s' }} />
-                        <div style={{ width: '8px', height: '8px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite 0.3s' }} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input */}
-              <div style={{
-                flexShrink: 0,
-                flexGrow: 0,
-                padding: '12px 16px',
-                paddingBottom: '16px',
-                borderTop: '1px solid #DFDFE9',
-                backgroundColor: '#FEF6F4',
-                position: 'relative',
-                bottom: 0,
-                zIndex: 10,
-                minHeight: 'auto'
-              }}>
-                {isRecording ? (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 16px',
-                    borderRadius: '24px',
-                    backgroundColor: 'white',
-                    border: '2px solid #EE6553',
-                    minHeight: '48px'
-                  }}>
-                    <button
-                      onClick={stopRecordingOnly}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        border: 'none',
-                        backgroundColor: '#323242',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        flexShrink: 0
-                      }}
-                    >
-                      <Square size={16} color="white" fill="white" />
-                    </button>
-                    <div style={{
-                      flex: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '3px',
-                      height: '24px'
-                    }}>
-                      {[...Array(30)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="audio-bar"
-                          style={{
-                            width: '3px',
-                            height: `${Math.max(20, Math.min(100, audioLevel + (Math.random() * 30)))}%`,
-                            backgroundColor: '#EE6553',
-                            borderRadius: '2px',
-                            transition: 'height 0.1s',
-                            animationDelay: `${i * 0.05}s`
-                          }}
-                        />
+                  {message.showProfileButtons && !userProfile && (
+                    <div className="hw-choices">
+                      {CHOICES.map((choice) => (
+                        <button
+                          key={choice.profile}
+                          type="button"
+                          className="hw-choice"
+                          onClick={() => handleChoice(choice)}
+                        >
+                          <span className="hw-choice-icon"><choice.Icon size={20} aria-hidden="true" /></span>
+                          <span className="hw-choice-text">
+                            <span className="hw-choice-label">{choice.label}</span>
+                            <span className="hw-choice-desc">{choice.desc}</span>
+                          </span>
+                          <ChevronRight className="hw-choice-chevron" size={18} aria-hidden="true" />
+                        </button>
                       ))}
                     </div>
-                    <button
-                      onClick={sendRecordingDirectly}
-                      style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        border: 'none',
-                        background: 'linear-gradient(to right, #ef4444, #f97316)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        flexShrink: 0
-                      }}
-                    >
-                      <Send size={18} color="white" />
-                    </button>
-                  </div>
-                ) : isTranscribing ? (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 16px',
-                    borderRadius: '24px',
-                    backgroundColor: 'white',
-                    border: '2px solid #DFDFE9'
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      color: '#7E7EA5',
-                      fontSize: '14px',
-                      flex: 1
-                    }}>
-                      <div style={{ display: 'flex', gap: '3px' }}>
-                        <div style={{ width: '6px', height: '6px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite' }} />
-                        <div style={{ width: '6px', height: '6px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite 0.15s' }} />
-                        <div style={{ width: '6px', height: '6px', backgroundColor: '#7E7EA5', borderRadius: '50%', animation: 'bounce 1s infinite 0.3s' }} />
-                      </div>
-                      <span>{inputValue}</span>
+                  )}
+
+                  {message.results && message.results.length > 0 && (
+                    <div className="hw-results">
+                      {message.results.map((result, ridx) => (
+                        <ResultCard key={ridx} result={result} />
+                      ))}
                     </div>
+                  )}
+
+                  {message.showCalendly && <CalendlyButton profile={userProfile} />}
+                </div>
+              ) : (
+                <div key={idx} className="hw-row hw-row--user">
+                  <div className="hw-bubble hw-bubble--user">
+                    <p>{message.content}</p>
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                </div>
+              )))}
+
+              {isLoading && (
+                <div className="hw-row hw-row--bot">
+                  <div className="hw-bubble hw-bubble--bot hw-typing" role="status" aria-label="Recherche en cours">
+                    <span className="hw-dots" aria-hidden="true"><span /><span /><span /></span>
+                    {loadingText && <span className="hw-typing-text">{loadingText}</span>}
+                  </div>
+                </div>
+              )}
+
+              <div ref={threadEndRef} />
+            </div>
+
+            <div className="hw-composer">
+              {isRecording ? (
+                <div className="hw-recording">
+                  <button
+                    type="button"
+                    className="hw-rec-stop"
+                    onClick={() => finishRecording(false)}
+                    aria-label="Arrêter et relire le texte"
+                    title="Arrêter et relire le texte"
+                  >
+                    <Square size={14} fill="currentColor" aria-hidden="true" />
+                  </button>
+                  <div className="hw-bars" aria-hidden="true">
+                    {[...Array(28)].map((_, i) => (
+                      <span
+                        key={i}
+                        style={{ height: `${Math.max(18, Math.min(100, audioLevel + (Math.random() * 30)))}%` }}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="hw-rec-send"
+                    onClick={() => finishRecording(true)}
+                    aria-label="Envoyer l'enregistrement"
+                    title="Envoyer"
+                  >
+                    <Send size={17} aria-hidden="true" />
+                  </button>
+                </div>
+              ) : isTranscribing ? (
+                <div className="hw-transcribing" role="status">
+                  <span className="hw-dots" aria-hidden="true"><span /><span /><span /></span>
+                  <span>Transcription en cours</span>
+                </div>
+              ) : (
+                <div className="hw-composer-row">
+                  {recordingSupported && (
                     <button
+                      type="button"
+                      className="hw-mic"
                       onClick={startRecording}
                       disabled={isLoading}
-                      style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '50%',
-                        border: '2px solid #DFDFE9',
-                        backgroundColor: 'white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: isLoading ? 'not-allowed' : 'pointer',
-                        transition: 'all 0.2s',
-                        flexShrink: 0,
-                        opacity: isLoading ? 0.5 : 1
-                      }}
-                      onMouseEnter={(e) => !isLoading && (e.currentTarget.style.borderColor = '#7E7EA5')}
-                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#DFDFE9')}
+                      aria-label="Dicter votre message"
+                      title="Dicter votre message"
                     >
-                      <Mic size={20} color="#5E5E8F" />
+                      <Mic size={20} aria-hidden="true" />
                     </button>
-
-                    <input
-                      type="text"
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      placeholder="Écrivez votre message..."
-                      disabled={isLoading}
-                      style={{
-                        flex: 1,
-                        padding: '12px 16px',
-                        borderRadius: '9999px',
-                        border: '2px solid #DFDFE9',
-                        fontSize: '16px',
-                        outline: 'none',
-                        transition: 'border-color 0.2s',
-                        backgroundColor: isLoading ? '#FEF6F4' : 'white',
-                        minWidth: 0,
-                        color: '#323242'
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = '#7E7EA5')}
-                      onBlur={(e) => (e.target.style.borderColor = '#DFDFE9')}
-                    />
-
-                    <button
-                      onClick={handleSendMessage}
-                      disabled={inputValue.trim().length === 0 || isLoading}
-                      style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        transition: 'all 0.3s',
-                        border: 'none',
-                        cursor: inputValue.trim().length > 0 && !isLoading ? 'pointer' : 'not-allowed',
-                        background: inputValue.trim().length > 0 && !isLoading ? 'linear-gradient(to right, #ef4444, #f97316)' : '#DFDFE9',
-                        opacity: inputValue.trim().length > 0 && !isLoading ? 1 : 0.6,
-                        flexShrink: 0
-                      }}
-                      onMouseEnter={(e) => inputValue.trim().length > 0 && !isLoading && (e.currentTarget.style.opacity = '0.9')}
-                      onMouseLeave={(e) => (e.currentTarget.style.opacity = inputValue.trim().length > 0 && !isLoading ? '1' : '0.6')}
-                    >
-                      <Send size={20} />
-                    </button>
-                  </div>
-                )}
-                <p style={{
-                  textAlign: 'center',
-                  fontSize: '11px',
-                  marginTop: '10px',
-                  opacity: 0.6,
-                  color: '#323242'
-                }}>
-                  Hormur - L'art où on ne l'attend pas
-                </p>
-              </div>
+                  )}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    className="hw-input"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={placeholder}
+                    aria-label="Votre message"
+                    enterKeyHint="send"
+                    autoComplete="off"
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    className="hw-send"
+                    onClick={handleSendMessage}
+                    disabled={!canSend}
+                    aria-label="Envoyer"
+                    title="Envoyer"
+                  >
+                    <Send size={19} aria-hidden="true" />
+                  </button>
+                </div>
+              )}
+              <p className="hw-notice">Réponses générées par une IA. Les fiches font foi.</p>
             </div>
-          </>
-        )}
-      </div>
-    </>
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 
