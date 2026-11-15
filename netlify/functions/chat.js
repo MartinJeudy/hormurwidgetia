@@ -33,7 +33,7 @@ exports.handler = async (event) => {
 
   try {
     const requestBody = JSON.parse(event.body || '{}');
-    const { message, userProfile, sessionId, audioData } = requestBody;
+    const { message, userProfile, sessionId, audioData, audioMime, transcribeOnly } = requestBody;
     
     let finalMessage = message?.trim() || '';
 
@@ -65,9 +65,11 @@ exports.handler = async (event) => {
         
         // Préparer le FormData pour l'API Whisper
         const formData = new FormData();
+        // Safari enregistre en mp4 : Whisper reconnaît le format à l'extension
+        const isMp4 = typeof audioMime === 'string' && audioMime.indexOf('mp4') !== -1;
         formData.append('file', audioBuffer, {
-          filename: 'audio.webm',
-          contentType: 'audio/webm'
+          filename: isMp4 ? 'audio.mp4' : 'audio.webm',
+          contentType: isMp4 ? 'audio/mp4' : 'audio/webm'
         });
         formData.append('model', 'whisper-1');
         formData.append('language', 'fr'); // Force français
@@ -111,6 +113,21 @@ exports.handler = async (event) => {
           })
         };
       }
+    }
+
+    // Dictée à relire avant envoi : on rend le texte reconnu sans interroger
+    // l'agent, la question partira quand l'utilisateur l'aura validée.
+    if (audioData && transcribeOnly === true) {
+      return {
+        statusCode: 200,
+        headers: corsHeaders,
+        body: JSON.stringify({
+          sessionId: sessionId || null,
+          transcribedText: finalMessage,
+          results: [],
+          showCalendly: false
+        })
+      };
     }
 
     // Vérifier qu'on a bien un message
